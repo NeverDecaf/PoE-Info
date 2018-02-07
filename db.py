@@ -108,9 +108,17 @@ class PoeDB:
         self.conn=None
         self.cursor=None
 
+    def reset(self):
+        self.cursor.execute('''DELETE FROM unique_items''')
+        self.cursor.execute('''DELETE FROM skill_gems''')
+        self.conn.commit()
+
 if __name__=='__main__':
-    a = PoeDB()
+    import sys
     
+    a = PoeDB()
+    if len(sys.argv)>1 and sys.argv[1]=='-r':
+        a.reset()
     #scrape uniques
     for unique in scrape_poe_wiki.format_affixes(scrape_poe_wiki.scrape_unique_items()):
         a.add_item(unique)
