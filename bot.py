@@ -5,7 +5,7 @@ import asyncio
 import os
 import db
 import re
-from functools import wraps
+from functools import wraps,partial
 import sqlite3
 import time
 from collections import OrderedDict
@@ -13,6 +13,7 @@ import requests
 import urllib.parse as urlparse
 from lxml import html as lxmlhtml
 import datetime
+import io,shutil # for copying pins
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
@@ -40,7 +41,6 @@ class BotWithReactions(commands.Bot):
         ''' message is the user message the bot is replying to. if provided we can autodelete failure messages if the original is edited. '''
         sent_msg = await super().send_message(destination,content=failure_message, **kwargs)
         if not destination.type == PRIVATE_CHANNEL:
-##            self.AUTO_CLEANUP.append((time.time(),sent_msg,message))
             self.AUTO_CLEANUP[message or self.CLEANUP_KEY] = (time.time(),sent_msg)
             self.CLEANUP_KEY = (self.CLEANUP_KEY+1)%1000000
         return sent_msg
@@ -134,14 +134,7 @@ class BotWithReactions(commands.Bot):
 
                 
 bot = BotWithReactions(command_prefix='-', description='PoE Info.')
-##@bot.event
-##async def on_message(message):
-##    if message.author==bot.user:
-##        return # ignore your own messages
-##    
-##    # keep this line LAST
-##    await bot.process_commands(message)
-    
+
 @bot.event
 async def on_reaction_add(reaction,user):
     if reaction.me and user!=bot.user and user is not None:
@@ -186,47 +179,24 @@ async def forum_announcements():
     await bot.wait_until_ready()
     await bot.wait_until_login() # just in case .is_closed is true before login.
     while not bot.is_closed:
-        try:
-            news = scrape_forum()
-            if news:
-                r=bot.cursor.execute('SELECT channel FROM announce WHERE type="forumannounce"')
-                for channel in [i[0] for i in r.fetchall()]:
-                    try:
-                        for e in news:
-                            await bot.send_message(discord.Object(id=channel), embed=e)
-                    except:
-##                        raise
-                        'channel missing or bot is blocked'
-        except:
-##            raise
-            'just for extra safety because an error here means the loop stops'
-        try:
-            patchnotes = scrape_forum('https://www.pathofexile.com/forum/view-forum/patch-notes','patch_notes','Patch Notes')
-            if patchnotes:
-                r=bot.cursor.execute('SELECT channel FROM announce WHERE type="patchnotes"')
-                for channel in [i[0] for i in r.fetchall()]:
-                    try:
-                        for e in news:
-                            await bot.send_message(discord.Object(id=channel), embed=e)
-                    except:
-##                        raise
-                        'channel missing or bot is blocked'
-        except:
-##            raise
-            'just for extra safety because an error here means the loop stops'
-        try:
-            deal = scrape_deals()
-            if deal:
-                r=bot.cursor.execute('SELECT channel FROM announce WHERE type="dailydeal"')
-                for channel in [i[0] for i in r.fetchall()]:
-                    try:
-                        await bot.send_message(discord.Object(id=channel), embed=deal)
-                    except:
-##                        raise
-                        'channel missing or bot is blocked'
-        except:
-##            raise
-            'just for extra safety because an error here means the loop stops'
+        announce_types = [('forumannounce',partial(scrape_forum)),
+                          ('patchnotes',partial(scrape_forum,'https://www.pathofexile.com/forum/view-forum/patch-notes','patch_notes','Patch Notes')),
+                           ('dailydeal',partial(scrape_deals))]
+        for name,func in announce_types:
+            try:
+                data = await func()
+                if data:
+                    r=bot.cursor.execute('SELECT channel FROM announce WHERE type=?',(name,))
+                    for channel in [i[0] for i in r.fetchall()]:
+                        try:
+                            for e in data:
+                                await bot.send_message(discord.Object(id=channel), embed=e)
+                        except:
+                            'channel missing or bot is blocked'
+            except Exception as e:
+                print('error scraping forums: %r'%e)
+                'just for extra safety because an error here means the loop stops'
+                'this can be caused by things like maintenance'
             
         await asyncio.sleep(60)
 
@@ -243,7 +213,68 @@ async def events(ctx, *msg : str):
     '''<on|off>
 Turn event announcements on/off.'''
     await announce_internals(ctx,' '.join(msg),'event','Event announcements','events')
+    
+@bot.command(pass_context=True)
+async def pin(ctx, *msg : str):
+    '''<count>|<set>
+Number of pins to move OR set a channel for pins.'''
+##    for chan in ctx.message.server.channels:
+    def perm_check(src,dst):
+        src_perms=src.permissions_for(ctx.message.server.me)
+        dest_perms=dst.permissions_for(ctx.message.server.me)
+        return dest_perms.send_messages and dest_perms.attach_files and dest_perms.embed_links\
+               and src_perms.read_message_history and src_perms.manage_messages and src_perms.read_messages
 
+    if len(msg)>1 and msg[0] == 'set':
+        # set pin channel
+        if not ctx.message.author.permissions_in(ctx.message.channel).administrator:
+            await bot.send_message(destination, 'You must be an administrator to set pin channel.')
+            return
+        try:
+            just_id = msg[1][2:-1]
+            ch = bot.get_channel(just_id)
+            if ch and perm_check(ctx.message.channel,ch):
+                bot.cursor.execute('REPLACE INTO pins(source,dest) VALUES(?,?)',(ctx.message.channel.id,just_id))
+                bot.conn.commit()
+                await bot.send_message(ctx.message.channel, 'Set pin destination for {} to {}'.format(ctx.message.channel.mention,ch.mention),code_block=False)
+                return
+            else:
+                raise Exception()
+        except:
+            await bot.send_message(ctx.message.channel, 'Invalid pin channel (must be a channel on this server + bot must have proper permissions)')
+            return
+    try:
+        if int(msg[0])<=0:
+            await bot.send_message(ctx.message.channel, 'usage:\n-pin <count>\n-pin set <channel>')
+            return
+    except:
+        await bot.send_message(ctx.message.channel, 'usage:\n-pin <count>\n-pin set <channel>')
+        return
+
+    r=bot.cursor.execute('SELECT dest FROM pins WHERE source=?',(ctx.message.channel.id,))
+    dest = r.fetchone()
+    if not dest:
+        await bot.send_message(ctx.message.channel, 'No destination channel set for pins, use -pin set <channel>')
+        return
+    pin_channel=bot.get_channel(str(dest[0]))
+    # do a extra permissions check for safety:
+    if pin_channel and perm_check(ctx.message.channel,pin_channel):
+        pins = await bot.pins_from(ctx.message.channel)
+        for pin in list(reversed(pins))[:max(len(pins),int(msg[0]))]:
+            msg_content = '{} ({}): {}'.format(pin.author.nick or pin.author,pin.edited_timestamp.strftime("%m/%d/%y") if pin.edited_timestamp else pin.timestamp.strftime("%d/%m/%y"),pin.content)
+            if pin.attachments:
+                buffer = io.BytesIO()
+                r = requests.get(pin.attachments[0]['url'], stream=True)
+                shutil.copyfileobj(r.raw, buffer)
+                buffer.seek(0)
+                await bot.send_file(pin_channel,buffer,filename=pin.attachments[0]['filename'],content=msg_content)
+            else:
+                await bot.send_message(pin_channel, msg_content,code_block=False)
+            await bot.unpin_message(pin) # This isnt working, or pins_from isnt refreshsed
+    else:
+        await bot.send_message(ctx.message.channel, 'Invalid pin channel (must be a channel on this server + bot must have proper permissions)')
+        return
+        
 async def announce_internals(ctx,msg,announce_id,announce_name,commandname):
     destination = ctx.message.channel
     if not msg or not len(msg):
@@ -372,7 +403,13 @@ def _create_unique_embed(data):
         return ''
     bold_nums = re.compile('(\(?-?(?:\d+(?:-|(?: to )))?\d*\.?\d+\)?%?)')
     bold_nums = re.compile('(\(?-?(?:\d*\.?\d+(?:-|(?: to )))?\d*\.?\d+\)?%?)')
-    stats_string = ''
+    if 'chaosValue' in data.keys() and 'exaltedValue' in data.keys() and data['chaosValue'] is not None and data['exaltedValue'] is not None:
+        if data['exaltedValue'] > 1:
+            stats_string = 'Est. Price: {0:.1f}ex\n'.format(data['exaltedValue'])
+        else:
+            stats_string = 'Est. Price: {0:.0f}c\n'.format(data['chaosValue'])
+    else:
+        stats_string = ''
     # leading \n are automatically removed. you can use htis to your advantage if you're careful how you place these.
     stats_string+="{}".format(if_not_zero(data['block'],'Chance to Block:'))
     #stats for armour pieces:
@@ -396,16 +433,18 @@ def _create_unique_embed(data):
     stats_string+='{}'.format(if_not_zero(data['jewellimit'],'Limited To:'))
     stats_string+='{}'.format(data['jewelradius'])
     
-    stats_string=bold_nums.sub(r'**\1**', stats_string)
+    stats_string=bold_nums.sub(r'**\1**', stats_string).replace('****','')
     e = discord.Embed(url='https://pathofexile.gamepedia.com/{}'.format(data['name'].replace(' ','_')),
         description=stats_string,#"Requires Level {}, {} Int\n400 EGs".format(data['levelreq'],data['intreq']),
         title=data['name'],
         type='rich',color=0xaf6025)
 ##    e.set_image(url=data['image_url'])
-    if data['thumbnail_url']:
-        e.set_thumbnail(url=data['thumbnail_url'])
+##    if data['thumbnail_url']:
+##        e.set_thumbnail(url=data['thumbnail_url'])
+    if 'icon' in data.keys() and data['icon']:
+        e.set_thumbnail(url=data['icon'].replace(' ','%20'))
     if data['impl'] or data['expl']: #this is only for tabula
-        e.add_field(name=bold_nums.sub(r'**\1**', str(data['impl'])) if data['impl'] else '--',value=bold_nums.sub(r'**\1**', str(data['expl'])) if data['expl'] else '--',inline=False)
+        e.add_field(name=bold_nums.sub(r'**\1**', str(data['impl'])).replace('****','') if data['impl'] else '--',value=bold_nums.sub(r'**\1**', str(data['expl'])).replace('****','') if data['expl'] else '--',inline=False)
     if data['physdps'] or data['eledps']:
         s=''
         if data['physdps']:
@@ -426,18 +465,36 @@ def _create_gem_embed(data):
         return ''
     bold_nums = re.compile('(\(?-?(?:\d*\.?\d+(?:-|(?: to )))?\d*\.?\d+\)?%?)')
 
-    stats_string = ''
+    if 'chaosValue' in data.keys() and 'exaltedValue' in data.keys() and data['chaosValue'] is not None and data['exaltedValue'] is not None:
+        if data['exaltedValue'] > 1:
+            if data['name'].startswith('Vaal '):
+                stats_string = '20/20 Price: {0:.1f}ex\n'.format(data['exaltedValue'])
+            else:
+                stats_string = '20q Price: {0:.1f}ex\n'.format(data['exaltedValue'])
+        else:
+            if data['name'].startswith('Vaal '):
+                stats_string = '20/20 Price: {0:.0f}c\n'.format(data['chaosValue'])
+            else:
+                stats_string = '20q Price: {0:.0f}c\n'.format(data['chaosValue'])
+    else:
+        stats_string = ''
     if data['mana_multiplier']:
         stats_string+='Mana Multiplier: {}%\n'.format(data['mana_multiplier'])
     if data['radius']:
         stats_string+='Radius: {}\n'.format(data['radius'])
-    if data['is_res']:
-##        stats_string+='Mana Reserved: {}%\n'.format(data['percent_mana_res'])
-        stats_string+='Mana Reserved: yes [broken wiki]\n'
-    if data['mana_cost']:
-        stats_string+='Mana Cost: {}\n'.format(data['mana_cost'])
-    if data['stored_uses']:
-        stats_string+='Can store {} use(s)\n'.format(data['stored_uses'])
+    if int(data['is_res']):
+        stats_string+='Mana Reserved: {}%\n'.format(data['mana_cost'])
+##        stats_string+='Mana Reserved: {}\n'.format(data['is_res'])
+##        stats_string+='Mana Reserved: yes [broken wiki]\n'
+    elif data['mana_cost']:
+        if data['mana_cost_max']:
+            stats_string+='Mana Cost: ({}-{})\n'.format(data['mana_cost'],data['mana_cost_max'])
+        else:
+            stats_string+='Mana Cost: {}\n'.format(data['mana_cost'])
+    if data['vaal_souls_requirement']:
+        stats_string+='Souls Per Use: {}\n'.format(data['vaal_souls_requirement'])
+    if data['vaal_stored_uses']:
+        stats_string+='Can store {} use(s)\n'.format(data['vaal_stored_uses'])
     if data['cooldown']:
         stats_string+='Cooldown Time: {}s\n'.format(data['cooldown'])    
     if data['cast_time']:
@@ -446,21 +503,21 @@ def _create_gem_embed(data):
         stats_string+='Critical Strike Chance: {}%\n'.format(data['crit_chance'])
     if data['proj_speed']:
         stats_string+='Projectile Speed: {}\n'.format(data['proj_speed'])
-    if data['damage_effectiveness']:
-        stats_string+='Damage Effectiveness: {}%\n'.format(data['damage_effectiveness'])
+    if data['damage_effectiveness_max'] and data['damage_effectiveness']:
+        stats_string+='Damage Effectiveness: ({}-{})%\n'.format(data['damage_effectiveness'],data['damage_effectiveness_max'])
     if data['level_requirement']:
-        stats_string+='Requires Level: {}'.format(data['level_requirement'])
+        stats_string+='Requires Level: ({}-{})'.format(data['level_requirement'],data['level_requirement_max'])
         if data['str_requirement']:
-            stats_string+=', {} Str'.format(data['str_requirement'])
+            stats_string+=', ({}-{}) Str'.format(data['str_requirement'],data['str_requirement_max'])
         if data['dex_requirement']:
-            stats_string+=', {} Dex'.format(data['dex_requirement'])
+            stats_string+=', ({}-{}) Dex'.format(data['dex_requirement'],data['dex_requirement_max'])
         if data['int_requirement']:
-            stats_string+=', {} Int'.format(data['int_requirement'])
+            stats_string+=', ({}-{}) Int'.format(data['int_requirement'],data['int_requirement_max'])
         stats_string+='\n'
     if data['gem_desc']:
         stats_string+='{}\n\n'.format(data['gem_desc'])
 
-    stats_string = bold_nums.sub(r'**\1**', stats_string.replace('<br>','\n'))
+    stats_string = bold_nums.sub(r'**\1**', stats_string.replace('<br>','\n')).replace('****','')
     if not stats_string:
         stats_string = '--'
     red = 0xc51e1e
@@ -484,7 +541,7 @@ def _create_gem_embed(data):
         e.set_thumbnail(url=data['thumbnail_url'])
         
     if data['qual_bonus'] and data['stat_text']:
-        e.add_field(name='Per 1% Quality:',value=bold_nums.sub(r'**\1**', '{}\n\n{}'.format(data['qual_bonus'],data['stat_text']).replace('<br>','\n')),inline=False)
+        e.add_field(name='Per 1% Quality:',value=bold_nums.sub(r'**\1**', '{}\n\n{}'.format(data['qual_bonus'],data['stat_text']).replace('<br>','\n')).replace('****',''),inline=False)
         
     if not data['primary_att'].lower() == 'none':
         e.set_footer(text=data['primary_att'])
@@ -493,8 +550,10 @@ def _create_gem_embed(data):
     return e
 
 # will return a list of embeds for all "unread" announcements
-def scrape_forum(section = 'https://www.pathofexile.com/forum/view-forum/news', table = 'forum_announcements', header = 'Forum Announcement'):
-    data = requests.get(section)
+async def scrape_forum(section = 'https://www.pathofexile.com/forum/view-forum/news', table = 'forum_announcements', header = 'Forum Announcement'):
+    loop = asyncio.get_event_loop() # could also use bot.loop or whatever it is
+    future = loop.run_in_executor(None, requests.get, section)
+    data = await future
     etree = lxmlhtml.fromstring(data.text)
     titles = [a.strip() for a in etree.xpath('//div[@class="title"]/a/text()')]
     urls = [urlparse.urljoin('https://www.pathofexile.com/',a) for a in etree.xpath('//div[@class="title"]/a/@href')]
@@ -513,18 +572,16 @@ def scrape_forum(section = 'https://www.pathofexile.com/forum/view-forum/news', 
             announces.append(_create_forum_embed(thread[1],thread[0],header))
     return announces
 
-def scrape_deals():
-    data = requests.get('https://www.pathofexile.com/shop/category/daily-deals')
+async def scrape_deals(deals = 'https://www.pathofexile.com/shop/category/daily-deals'):
+    loop = asyncio.get_event_loop() # could also use bot.loop or whatever it is
+    future = loop.run_in_executor(None, requests.get, deals)
+    data = await future
     etree = lxmlhtml.fromstring(data.text)
-    itemnames = [a.strip() for a in etree.xpath('//img[@class="itemImage"]/@alt')]
-    urls = etree.xpath('//img[@class="itemImage"]/@src')
+    itemnames = [a.strip() for a in etree.xpath('//a[contains(@class,"itemImage")]/@alt')]
+    im_urls = etree.xpath('//a[contains(@class,"itemImage")]/@data-href')
     import hashlib
     now = datetime.datetime.now()
-    
-##    itemhash = hashlib.md5(str(itemnames+['{}'.format(int(now.strftime("%j"))//7)]).encode('utf8')).digest()
-    # the previous line is broken actually. it doesnt work like you want.
     itemhash = hashlib.md5(str(itemnames).encode('utf8')).digest()
-##    itemhash = int(hashlib.sha1(str(itemnames).encode('utf-8')).hexdigest(), 16)
     title = ' | '.join(itemnames[:2])
     if len(itemnames) >2:
         title += ' | + %i more'%(len(itemnames)-2)
@@ -533,10 +590,10 @@ def scrape_deals():
         return None
     else:
         #announce.
-        bot.cursor.execute('REPLACE INTO daily_deals (title,img_url,hash) VALUES (?,?,?)',(title,urls[0],itemhash))
+        bot.cursor.execute('REPLACE INTO daily_deals (title,img_url,hash) VALUES (?,?,?)',(title,im_urls[0],itemhash))
         bot.cursor.execute('''DELETE FROM daily_deals WHERE ROWID IN (SELECT ROWID FROM daily_deals ORDER BY ROWID DESC LIMIT -1 OFFSET 7)''')
         bot.conn.commit()
-        return _create_deal_embed(title,urls[0])
+        return (_create_deal_embed(title,im_urls[0]),)
 
 def _create_forum_embed(url,title,name='Forum Announcement'):
     e = discord.Embed(url=url,
@@ -573,6 +630,9 @@ if __name__ =='__main__':
              (title text,
              img_url text,
              hash text PRIMARY KEY)''')
+    bot.cursor.execute('''CREATE TABLE IF NOT EXISTS pins
+             (source int PRIMARY KEY,
+             dest int)''')
     bot.conn.commit()
     with open('token','r') as f:
         bot.loop.create_task(cleanup_reactions())
@@ -581,4 +641,3 @@ if __name__ =='__main__':
         bot.run(f.read())
 
 ##https://discordapp.com/oauth2/authorize?client_id=313788924151726082&scope=bot&permissions=0
-        

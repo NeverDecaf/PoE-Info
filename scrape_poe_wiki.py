@@ -55,8 +55,6 @@ def format_affixes(item_list):
                 r=requests.get('https://raw.githubusercontent.com/aRTy42/scrape_poe_info/master/UniqueStyleVariants.json')
                 r.encoding='utf8'
                 prepared_style_variants = r.json()
-##        with open('UniqueStyleVariants.json', 'r') as f:
-##                prepared_style_variants = json.load(f)
         except:
                 prepared_style_variants={}
         
@@ -108,7 +106,26 @@ def format_affixes(item_list):
         return new_data
 
 # cargo wiki field: local sqlitedb field
-SKILL_GEM_PROPERTY_MAPPING={
+SKILL_GEM_VARIABLE_FIELDS={
+                #skill_levels fields
+##                'skill_levels.stat_text':'stat_text', # use the one from `skill` as it already has ranges
+                'skill_levels.cooldown':'cooldown',
+                'skill_levels.critical_strike_chance':'crit_chance',
+                'skill_levels.damage_effectiveness':'damage_effectiveness',
+                'skill_levels.damage_multiplier':'damage_multiplier',
+                'skill_levels.dexterity_requirement':'dex_requirement',
+                'skill_levels.experience':'xp',
+                'skill_levels.intelligence_requirement':'int_requirement',
+                'skill_levels.level_requirement':'level_requirement',
+                'skill_levels.mana_cost':'mana_cost',
+                'skill_levels.mana_multiplier':'mana_multiplier',
+                'skill_levels.stored_uses':'stored_uses',
+                'skill_levels.strength_requirement':'str_requirement',
+                'skill_levels.vaal_souls_requirement':'vaal_souls_requirement',
+                'skill_levels.vaal_stored_uses':'vaal_stored_uses',
+        }
+SKILL_GEM_PROPERTY_MAPPING=dict(
+        {
                 #skill_gems fields:
                 'skill_gems._pageName':'name',
                 'skill_gems.gem_description':'gem_desc',
@@ -132,42 +149,58 @@ SKILL_GEM_PROPERTY_MAPPING={
                 'skill.radius_description':'radius_desc',
                 'skill.radius_secondary_description':'radius_2_desc',
                 'skill.radius_tertiary_description':'radius_3_desc',
-                #skill_levels fields
-                'skill_levels.stat_text':'stat_text',
-                'skill_levels.cooldown':'cooldown',
-                'skill_levels.critical_strike_chance':'crit_chance',
-                'skill_levels.damage_effectiveness':'damage_effectiveness',
-                'skill_levels.damage_multiplier':'damage_multiplier',
-                'skill_levels.dexterity_requirement':'dex_requirement',
-                'skill_levels.experience':'xp',
-                'skill_levels.intelligence_requirement':'int_requirement',
-                'skill_levels.level_requirement':'level_requirement',
-                'skill_levels.mana_cost':'mana_cost',
-                'skill_levels.mana_multiplier':'mana_multiplier',
-                'skill_levels.stored_uses':'stored_uses',
-                'skill_levels.strength_requirement':'str_requirement',
-                'skill_levels.vaal_souls_requirement':'vaal_souls_requirement',
-                'skill_levels.vaal_stored_uses':'vaal_stored_uses',
-        }
+                'skill.html':'html',
+                'skill.stat_text':'stat_text',
+        },
+        **SKILL_GEM_VARIABLE_FIELDS)
 
-def scrape_skill_gems(limit=500):                
+def scrape_skill_gems(limit=100000):
+        query_limit = 500
+        rowindex = 0
+        last_rowid = -1
         fields_to_fetch = list(SKILL_GEM_PROPERTY_MAPPING.values())
-        query = 'https://pathofexile.gamepedia.com/api.php?action=cargoquery&format=json&tables=skill_gems,skill,skill_levels&join_on=skill_gems._pageName=skill._pageName,skill_gems._pageName=skill_levels._pageName&fields='+','.join(['='.join((k,v)) for k,v in SKILL_GEM_PROPERTY_MAPPING.items()])+'&where=skill_levels.level=skill.max_level&group_by=skill_gems._pageName&limit='+str(limit)
-        api_results = []
-        for i in range(3):
-                rj=None
-                try:
-                        r = requests.get(query)
-                        r.encoding = 'utf-8'
-                        rj = r.json()
-                        api_results = [a['title'] for a in rj['cargoquery']]
+        keyed_results = {}
+
+        while rowindex<limit:
+                query = 'https://pathofexile.gamepedia.com/api.php?action=cargoquery&format=json&tables=skill_gems,skill,skill_levels&join_on=skill_gems._pageName=skill._pageName,skill_gems._pageName=skill_levels._pageName&fields='+\
+                ','.join(['='.join((k,v)) for k,v in SKILL_GEM_PROPERTY_MAPPING.items()])+',skill_gems._rowID=rowid,skill_levels.level=level&where=skill_gems._rowID>{} AND (skill_levels.level=skill.max_level OR skill_levels.level<2)&order_by=skill_gems._rowID&limit={}'.format(last_rowid+1,query_limit)
+                api_results = []
+##                print(query)
+                for i in range(3):
+                        rj=None
+                        try:
+                                r = requests.get(query)
+                                r.encoding = 'utf-8'
+                                rj = r.json()
+                                api_results = [a['title'] for a in rj['cargoquery']]
+                                break
+                        except:
+                                print(rj)
+                                time.sleep(4)
+                if not len(api_results):
                         break
-                except:
-                        print(rj)
-                        time.sleep(4)
-        return api_results
-'''https://pathofexile.gamepedia.com/api.php?action=cargoquery&tables=skill_gems&fields=_pageName=name,gem_description=gem_desc,EXISTS(support_gem_letter)&limit=10'''
-'https://pathofexile.gamepedia.com/api.php?action=cargoquery&tables=items&where=rarity=unique&limit=10'
+                for res in api_results:
+                        last_rowid = int(res['rowid'])
+                        res.pop('rowid',None)
+                        thislevel = int(res.pop('level',None))
+                        if res['name'] not in keyed_results:
+                                keyed_results[res['name']] = res
+                        if thislevel == int(res['max_level']):
+                                # add _max version of all SKILL_GEM_VARIABLE_FIELDS
+                                keyed_results[res['name']].update({'{}_max'.format(k):v for k,v in res.items() if k in SKILL_GEM_VARIABLE_FIELDS.values()})
+                        elif thislevel == 0:
+                                #updates dict, replacing only the empty values with new ones
+                                # filters res, result contains only keys for which keyed_results has a value of None/0/""
+                                keyed_results[res['name']].update(
+                                        {k:v for k,v in res.items() if k in [k for k,v in keyed_results[res['name']].items() if not v]}
+                                        )
+                        elif thislevel == 1:
+                                #update with all non-null values
+                                keyed_results[res['name']].update({k:v for k,v in res.items() if v})
+                
+                rowindex+=query_limit
+                time.sleep(3)
+        return keyed_results.values()
 
 UNIQUE_ITEM_PROPERTY_MAPPING={
         'items._pageName':'name',
@@ -182,7 +215,7 @@ UNIQUE_ITEM_PROPERTY_MAPPING={
 
         'weapons.critical_strike_chance_range_text':'crit',
         'weapons.attack_speed_range_text':'aspd',
-        'weapons.range_range_text':'range',
+        'weapons.weapon_range_range_text':'range',
         'weapons.physical_damage_max_range_text':'physmax',
         'weapons.physical_damage_min_range_text':'physmin',
         'weapons.fire_damage_max_range_text':'firemax',
@@ -249,20 +282,20 @@ def get_image_url(pageName, image_url, is_div_card=False):
                 return data['imageinfo'][0]['url']
         return None
 
-def scrape_unique_items(limit=100000):
+def scrape_unique_items(limit=50000):
         full_results=[]
         fields_to_fetch = list(SKILL_GEM_PROPERTY_MAPPING.values())
         rowindex = 0
         query_limit = 500
-        TABLE_SIZE = 9000 #just a guess.
+        last_rowid = -1 # adds 1 to this.
         while rowindex<limit:
                 query = 'https://pathofexile.gamepedia.com/api.php?action=cargoquery&format=json&tables=items,weapons,shields,armours,jewels,flasks&join_on=items._pageName=weapons._pageName,items._pageName=shields._pageName,items._pageName=armours._pageName'+\
                         ',items._pageName=jewels._pageName,items._pageName=flasks._pageName'+\
-                        '&fields='+','.join(['='.join((k,v)) for k,v in UNIQUE_ITEM_PROPERTY_MAPPING.items()])+'&where=rarity=\'Unique\' AND items._rowID>={} AND items._rowID<{}&group_by=items._pageName&limit={}'.format(rowindex,rowindex+query_limit,query_limit)
-
+                        '&fields='+','.join(['='.join((k,v)) for k,v in UNIQUE_ITEM_PROPERTY_MAPPING.items()])+',items._rowID=rowid&where=rarity=\'Unique\' AND items._rowID>={}&group_by=items._pageName&order_by=items._rowID&limit={}'.format(last_rowid+1,query_limit)
                 # need to fetch in batches of 500 (the limit for one query)
                 # we will use _rowID to do this, continue querying until we get 0 results
                 # this isnt 100% safe but it should work unless someone does something to really break the db.
+                # we have fixed this maybe with 'expected_items', see above.
                 api_results = []
                 for i in range(3):
                         rj=None
@@ -276,19 +309,62 @@ def scrape_unique_items(limit=100000):
                                 print(rj)
                                 time.sleep(4)
                                 #error, trying again.
-                if not len(api_results) and rowindex>TABLE_SIZE:
+##                print('currently at',len(full_results),'/',expected_items,'items. row#:',rowindex)
+                if not len(api_results): # and len(full_results)>=expected_items:
                         break
                 for res in api_results:
+                        last_rowid = int(res['rowid'])
+                        res.pop('rowid',None)
                         res['impl'] = remove_wiki_formats(html.unescape(res['impl']))
                         res['expl'] = remove_wiki_formats(html.unescape(res['expl']))#.replace('<br>','\n')
                 full_results.extend(api_results)
                 rowindex+=query_limit
-                time.sleep(2)
+                time.sleep(3)
         # need to call remove_wiki_formats on impl and expl and we should be good2go
 ##        print('total unique_item results:',len(full_results))
         return full_results
 
-if __name__ == '__main__':
-        from pprint import pprint
-        print(len(scrape_unique_items()))
-##        print('url:',get_image_url('Shimmeron',None))
+#only the fields we care about.
+#itemclass 4 is gems. probably the only one we need
+POE_NINJA_FIELDS = ['id',
+                    'name',
+                    'icon',
+                    'itemClass',
+                    'chaosValue',
+                    'exaltedValue',
+                    ]
+                    
+def get_ninja_prices(league='tmpStandard'):
+        '''use poe.ninja api to get item prices'''
+        endpoints = [('item','UniqueMap'),
+                     ('item','UniqueJewel'),
+                     ('item','UniqueFlask'),
+                     ('item','UniqueWeapon'),
+                     ('item','UniqueArmour'),
+                     ('item','UniqueAccessory'),
+                     ('item','SkillGem'),
+                     ]
+##        endpoints = [('item','SkillGem'),]
+        data=[]
+        api = 'https://poe.ninja/api/data/{}overview?league={}&type={}'
+        for itemtype in endpoints:
+                r = requests.get(api.format(itemtype[0],league,itemtype[1]))
+                r.encoding = 'utf-8'
+                rj = r.json()
+                for x in rj['lines']:
+                        if int(x['itemClass'])==4:
+                                if x['name'].startswith('Vaal ') and int(x['gemLevel'])==20 and int(x['gemQuality'])==20:
+                                        # use 20/20 for vaal gems
+                                        data.append({key:x[key] for key in POE_NINJA_FIELDS})
+                                elif int(x['gemLevel'])==1 and int(x['gemQuality'])==20:
+                                        # use 1/20 for normal gems
+                                        data.append({key:x[key] for key in POE_NINJA_FIELDS})
+                        elif x['name'].strip() in ['Tabula Rasa','Skin of the Lords','Skin of the Loyal','The Goddess Unleashed','Oni-Goroshi']:
+                                if int(x['links'])==6:
+                                        data.append({key:x[key] for key in POE_NINJA_FIELDS})
+                        elif 'links' not in x or int(x['links'])==0:
+                                data.append({key:x[key] for key in POE_NINJA_FIELDS})
+                        
+                                
+                time.sleep(3)
+        return data

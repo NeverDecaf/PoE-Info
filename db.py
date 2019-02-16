@@ -31,10 +31,13 @@ class PoeDB:
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS unique_items
                  (thumbnail_url text, {}, PRIMARY KEY (name))'''.format(','.join([name+' text' for name in field_names])))
         field_names = scrape_poe_wiki.SKILL_GEM_PROPERTY_MAPPING.values()
+        levelmax_field_names = scrape_poe_wiki.SKILL_GEM_VARIABLE_FIELDS.values()
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS skill_gems
-                 (thumbnail_url text, {}, PRIMARY KEY (name))'''.format(','.join([name+' text' for name in field_names])))
+                 (thumbnail_url text, {}, {}, PRIMARY KEY (name))'''.format(','.join([name+' text' for name in field_names]),','.join([name+'_max text' for name in levelmax_field_names])))
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS event_times
                  (id text primary key, startAt timestamp, endAt timestamp, url text)''')
+        self.cursor.execute('''CREATE TABLE IF NOT EXISTS ninja_data
+                 (id integer PRIMARY KEY, name text, icon text, chaosValue real, exaltedValue real, itemClass integer)''')
         self.conn.commit()
 
     def add_item(self,data,table='unique_items'):
@@ -45,8 +48,7 @@ class PoeDB:
         self.conn.commit()
         
     def get_data(self,tablename,searchname,limit = 9):
-        # just use a LIKE
-        query = '''SELECT * FROM {} WHERE name COLLATE NOCASE LIKE "%"||?||"%" LIMIT {}'''.format(tablename,limit)
+        query = '''SELECT * FROM {} left join ninja_data on {}.name=ninja_data.name WHERE {}.name COLLATE NOCASE LIKE "%"||?||"%" LIMIT {}'''.format(tablename,tablename,tablename,limit)
         res=self.cursor.execute(query,(searchname.lower(),))
         return res.fetchall()
     
@@ -60,7 +62,7 @@ class PoeDB:
         if len(js):
             self.cursor.execute('''DELETE FROM event_times''')
         for event in js:
-            self._insert_data(event,'event_times')
+            self._insert_data(event,'event_times',ignore_nonexistant_cols=True)
             
     def _get_images(self,table):
         query = '''SELECT name,image_url FROM {} WHERE thumbnail_url IS NULL'''.format(table)
@@ -68,15 +70,21 @@ class PoeDB:
         for name,url in pairs:
             thumb_url = scrape_poe_wiki.get_image_url(name,url,is_div_card=False)
             self.cursor.execute('UPDATE {} set thumbnail_url=? where name=?'.format(table),(thumb_url,name))
-            time.sleep(1)
+            time.sleep(1)            
         
-    def _insert_data(self, data, table):
+    def _insert_data(self, data, table, ignore_nonexistant_cols=False):
         '''
         Generic data insertion for the db. Does a REPLACE which will overwrite existing data.
 
         data is a dict of data where keys are equivalent to columns in the db.
         table is the db table name into which you are inserting data.
         '''
+        if ignore_nonexistant_cols:
+            r = self.cursor.execute('''PRAGMA table_info({})'''.format(table))
+            cols = tuple([m[1] for m in r.fetchall()])
+            data = data.copy()
+            for todel in [c for c in data.keys() if c not in cols]:
+                data.pop(todel)
         columns = ', '.join(data.keys())
         placeholders = ', '.join(['?']*len(data.values()))
         query = '''REPLACE INTO %s (%s) VALUES (%s)''' % (table, columns, placeholders)
@@ -111,6 +119,7 @@ class PoeDB:
     def reset(self):
         self.cursor.execute('''DELETE FROM unique_items''')
         self.cursor.execute('''DELETE FROM skill_gems''')
+        self.cursor.execute('''DELETE FROM ninja_data''')
         self.conn.commit()
 
 if __name__=='__main__':
@@ -125,10 +134,11 @@ if __name__=='__main__':
     #scrape skill gems
     for gem in scrape_poe_wiki.scrape_skill_gems():
         a.add_item(gem,'skill_gems')
-    # get thumbnail images (SLOW) (1s pause per item in addition to page load times)
-    a._get_images('unique_items')
-    a._get_images('skill_gems')
-    
+    # get poe.ninja data (mainly for price)
+    for datum in scrape_poe_wiki.get_ninja_prices():
+        a.add_item(datum,'ninja_data')
+
+    a._scrape_events()
     a.close()
 
 
