@@ -10,7 +10,6 @@ Here is a (maybe not exhaustive) list of commands:
 -  patchnotes  -- Toggle notifications for patch note posts
 -  events   -- Toggle notifications for events (races)
 -  deals   -- Toggle notifications for daily deals
-meta:
 -  pin   -- Moves pins to a different channel (to overcome discord pin limit)
 
 type -help <command> for more info on any of these
