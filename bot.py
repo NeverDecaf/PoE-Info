@@ -173,7 +173,7 @@ async def cleanup_reactions():
         except:
 ##            raise
             'just for extra safety because an error here means the loop stops'
-        await asyncio.sleep(1)
+        await asyncio.sleep(10)
 
 async def forum_announcements():
     await bot.wait_until_ready()
@@ -197,7 +197,6 @@ async def forum_announcements():
                 print('error scraping forums: %r'%e)
                 'just for extra safety because an error here means the loop stops'
                 'this can be caused by things like maintenance'
-            
         await asyncio.sleep(60)
 
 @bot.event
@@ -260,7 +259,7 @@ Number of pins to move OR set a channel for pins.'''
     # do a extra permissions check for safety:
     if pin_channel and perm_check(ctx.message.channel,pin_channel):
         pins = await bot.pins_from(ctx.message.channel)
-        for pin in list(reversed(pins))[:max(len(pins),int(msg[0]))]:
+        for pin in list(reversed(pins))[:min(len(pins),int(msg[0]))]:
             msg_content = '{} ({}): {}'.format(pin.author.nick or pin.author,pin.edited_timestamp.strftime("%m/%d/%y") if pin.edited_timestamp else pin.timestamp.strftime("%d/%m/%y"),pin.content)
             if pin.attachments:
                 buffer = io.BytesIO()
@@ -635,9 +634,12 @@ if __name__ =='__main__':
              dest int)''')
     bot.conn.commit()
     with open('token','r') as f:
-        bot.loop.create_task(cleanup_reactions())
-        bot.loop.create_task(forum_announcements())
-        
-        bot.run(f.read())
+##        bot.loop.create_task(cleanup_reactions())
+##        bot.loop.create_task(forum_announcements())
+##        bot.run(f.read())
+
+        # if any (background) task raises an exception, end this bot.
+        tasks = [bot.start(f.read()),bot.loop.create_task(cleanup_reactions()),bot.loop.create_task(forum_announcements())]
+        bot.loop.run_until_complete(asyncio.gather(*tasks))
 
 ##https://discordapp.com/oauth2/authorize?client_id=313788924151726082&scope=bot&permissions=0
