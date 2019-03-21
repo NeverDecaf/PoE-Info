@@ -195,6 +195,7 @@ async def forum_announcements():
                             'channel missing or bot is blocked'
             except Exception as e:
                 print('error scraping forums: %r'%e)
+##                raise
                 'just for extra safety because an error here means the loop stops'
                 'this can be caused by things like maintenance'
         await asyncio.sleep(60)
@@ -435,7 +436,7 @@ def _create_unique_embed(data):
     stats_string=bold_nums.sub(r'**\1**', stats_string).replace('****','')
     e = discord.Embed(url='https://pathofexile.gamepedia.com/{}'.format(data['name'].replace(' ','_')),
         description=stats_string,#"Requires Level {}, {} Int\n400 EGs".format(data['levelreq'],data['intreq']),
-        title=data['name'],
+        title='\n'.join((data['name'].strip(),data['baseitem'].strip())),
         type='rich',color=0xaf6025)
 ##    e.set_image(url=data['image_url'])
 ##    if data['thumbnail_url']:
