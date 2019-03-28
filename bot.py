@@ -194,7 +194,7 @@ async def forum_announcements():
                         except:
                             'channel missing or bot is blocked'
             except Exception as e:
-                print('error scraping forums: %r'%e)
+                print('error scraping forums (%s): %r'%(name,e))
 ##                raise
                 'just for extra safety because an error here means the loop stops'
                 'this can be caused by things like maintenance'
@@ -559,9 +559,13 @@ async def scrape_forum(section = 'https://www.pathofexile.com/forum/view-forum/n
     urls = [urlparse.urljoin('https://www.pathofexile.com/',a) for a in etree.xpath('//div[@class="title"]/a/@href')]
     threadnums = [a.split('/')[-1] for a in urls]
     threads = list(zip(titles,urls,threadnums))
-
     announces = []
-    for thread in threads:
+    
+    r=bot.cursor.execute('SELECT threadnum FROM `{}` WHERE threadnum IN ({})'.format(table, ','.join([x[2] for x in threads])))
+    already_parsed = [x[0] for x in r.fetchall()]
+
+    new_threads = filter(lambda x: x[2] not in already_parsed,threads)
+    for thread in new_threads:
         r=bot.cursor.execute('SELECT 1 FROM %s WHERE threadnum=?'%table,(thread[2],))
         if r.fetchone():
             break
