@@ -195,7 +195,7 @@ async def forum_announcements():
                             'channel missing or bot is blocked'
             except Exception as e:
                 print('error scraping forums (%s): %r'%(name,e))
-##                raise
+                raise
                 'just for extra safety because an error here means the loop stops'
                 'this can be caused by things like maintenance'
         await asyncio.sleep(60)
@@ -590,7 +590,7 @@ async def scrape_deals(deals = 'https://www.pathofexile.com/shop/category/daily-
     if len(itemnames) >2:
         title += ' | + %i more'%(len(itemnames)-2)
     r=bot.cursor.execute('SELECT 1 FROM daily_deals WHERE hash=?',(itemhash,))
-    if r.fetchone():
+    if r.fetchone() or not im_urls:
         return None
     else:
         #announce.
