@@ -306,9 +306,32 @@ async def announce_internals(ctx,msg,announce_id,announce_name,commandname):
     else:
         await bot.send_message(destination, 'usage: -{} <on|off>'.format(commandname))
 
+VALID_PC_LEAGUES = ['tmpStandard', 'tmpHardcore', 'eventStandard', 'eventHardcore', 'Standard', 'Hardcore']
+@bot.command(pass_context=True,aliases=['setleague','pc','league','pricecheck'])
+async def pcleague(ctx, *league : str):
+    '''<league>
+Set league for pricing in this channel, options are: tmpStandard, tmpHardcore, eventStandard, eventHardcore, Standard, Hardcore.'''
+    destination = ctx.message.channel
+    if not league or not len(league):
+        r=bot.cursor.execute('SELECT league FROM pricecheck WHERE channel=?',(destination.id,))
+        league = r.fetchone() or ('tmpStandard',)
+        league = league[0]
+        if destination.type == PRIVATE_CHANNEL:
+            await bot.send_message(destination, 'Currently checking prices in {}. -help pcleague to change.'.format(league,))
+        else:
+            await bot.send_message(destination, 'Currently checking prices in {} for {}. -help pcleague to change.'.format(league,destination.mention), code_block=False)
+        return
+    if not destination.type == PRIVATE_CHANNEL and not ctx.message.author.permissions_in(ctx.message.channel).administrator:
+        await bot.send_message(destination, 'You must be an administrator to use this command.')
+        return
+    try:
+        i = [a.lower() for a in VALID_PC_LEAGUES].index(' '.join(league).lower())
+        bot.cursor.execute('REPLACE INTO pricecheck (channel,league) VALUES (?,?)',(destination.id,VALID_PC_LEAGUES[i]))
+        bot.conn.commit()
+        await bot.send_message(destination, 'Now pricechecking in {}.'.format(VALID_PC_LEAGUES[i]))
+    except ValueError:
+        await bot.send_message(destination, 'Not a valid league, must be one of: tmpStandard, tmpHardcore, eventStandard, eventHardcore, Standard, Hardcore')
 
-
-        
 @bot.command(pass_context=True)
 async def announcements(ctx, *toggle : str):
     '''<on|off>
@@ -637,6 +660,9 @@ if __name__ =='__main__':
     bot.cursor.execute('''CREATE TABLE IF NOT EXISTS pins
              (source int PRIMARY KEY,
              dest int)''')
+    bot.cursor.execute('''CREATE TABLE IF NOT EXISTS pricecheck
+             (channel int PRIMARY KEY,
+             league text)''')
     bot.conn.commit()
     with open('token','r') as f:
 ##        bot.loop.create_task(cleanup_reactions())
