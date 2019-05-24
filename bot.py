@@ -209,13 +209,13 @@ async def on_ready():
     await bot.change_presence(game=discord.Game(name='-help'))
 
 @bot.command(pass_context=True)
-async def events(ctx, *msg : str):
+async def events(ctx, *toggle : str):
     '''<on|off>
 Turn event announcements on/off.'''
-    await announce_internals(ctx,' '.join(msg),'event','Event announcements','events')
+    await announce_internals(ctx,' '.join(toggle),'event','Event announcements','events')
     
 @bot.command(pass_context=True)
-async def pin(ctx, *msg : str):
+async def pin(ctx, *count : str):
     '''<count>|<set>
 Number of pins to move OR set a channel for pins.'''
 ##    for chan in ctx.message.server.channels:
@@ -225,13 +225,13 @@ Number of pins to move OR set a channel for pins.'''
         return dest_perms.send_messages and dest_perms.attach_files and dest_perms.embed_links\
                and src_perms.read_message_history and src_perms.manage_messages and src_perms.read_messages
 
-    if len(msg)>1 and msg[0] == 'set':
+    if len(count)>1 and count[0] == 'set':
         # set pin channel
         if not ctx.message.author.permissions_in(ctx.message.channel).administrator:
             await bot.send_message(destination, 'You must be an administrator to set pin channel.')
             return
         try:
-            just_id = msg[1][2:-1]
+            just_id = count[1][2:-1]
             ch = bot.get_channel(just_id)
             if ch and perm_check(ctx.message.channel,ch):
                 bot.cursor.execute('REPLACE INTO pins(source,dest) VALUES(?,?)',(ctx.message.channel.id,just_id))
@@ -244,7 +244,7 @@ Number of pins to move OR set a channel for pins.'''
             await bot.send_message(ctx.message.channel, 'Invalid pin channel (must be a channel on this server + bot must have proper permissions)')
             return
     try:
-        if int(msg[0])<=0:
+        if int(count[0])<=0:
             await bot.send_message(ctx.message.channel, 'usage:\n-pin <count>\n-pin set <channel>')
             return
     except:
@@ -260,7 +260,7 @@ Number of pins to move OR set a channel for pins.'''
     # do a extra permissions check for safety:
     if pin_channel and perm_check(ctx.message.channel,pin_channel):
         pins = await bot.pins_from(ctx.message.channel)
-        for pin in list(reversed(pins))[:min(len(pins),int(msg[0]))]:
+        for pin in list(reversed(pins))[:min(len(pins),int(count[0]))]:
             msg_content = '{} ({}): {}'.format(pin.author.nick or pin.author,pin.edited_timestamp.strftime("%m/%d/%y") if pin.edited_timestamp else pin.timestamp.strftime("%d/%m/%y"),pin.content)
             if pin.attachments:
                 buffer = io.BytesIO()
