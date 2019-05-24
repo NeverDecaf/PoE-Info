@@ -10,7 +10,7 @@ import os
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
-
+VALID_PC_LEAGUES = ['tmpStandard', 'tmpHardcore', 'eventStandard', 'eventHardcore', 'Standard', 'Hardcore']
 class PoeDB:
 
     def __init__(self,ro=False,dbfile="poedb.sqlite"):
@@ -37,7 +37,7 @@ class PoeDB:
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS event_times
                  (id text primary key, startAt timestamp, endAt timestamp, url text)''')
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS ninja_data
-                 (id integer PRIMARY KEY, name text, icon text, chaosValue real, exaltedValue real, itemClass integer)''')
+                 (id integer, name text, icon text, chaosValue real, exaltedValue real, itemClass integer, league text, PRIMARY KEY (id,league))''')
         self.conn.commit()
 
     def add_item(self,data,table='unique_items'):
@@ -47,9 +47,9 @@ class PoeDB:
         self.cursor.execute(query, [v if v==None else html.unescape(str(v)) for v in list(data.values())])
         self.conn.commit()
         
-    def get_data(self,tablename,searchname,limit = 9):
-        query = '''SELECT * FROM {} left join ninja_data on {}.name=ninja_data.name WHERE {}.name COLLATE NOCASE LIKE "%"||?||"%" LIMIT {}'''.format(tablename,tablename,tablename,limit)
-        res=self.cursor.execute(query,(searchname.lower(),))
+    def get_data(self,tablename,searchname,league,limit = 9):
+        query = '''SELECT * FROM {} left join ninja_data on {}.name=ninja_data.name AND ninja_data.league=? COLLATE NOCASE WHERE {}.name COLLATE NOCASE LIKE "%"||?||"%" LIMIT {}'''.format(tablename,tablename,tablename,limit)
+        res=self.cursor.execute(query,(league,searchname.lower(),))
         return res.fetchall()
     
     def upcoming_event(self,warning_intervals=[5]):
@@ -135,9 +135,9 @@ if __name__=='__main__':
     for gem in scrape_poe_wiki.scrape_skill_gems():
         a.add_item(gem,'skill_gems')
     # get poe.ninja data (mainly for price)
-    for datum in scrape_poe_wiki.get_ninja_prices():
-        a.add_item(datum,'ninja_data')
-
+    for league in VALID_PC_LEAGUES:
+        for datum in scrape_poe_wiki.get_ninja_prices(league):
+            a.add_item(datum,'ninja_data')
     a._scrape_events()
     a.close()
 

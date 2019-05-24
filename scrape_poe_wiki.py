@@ -364,7 +364,6 @@ def get_ninja_prices(league='tmpStandard'):
                                         data.append({key:x[key] for key in POE_NINJA_FIELDS})
                         elif 'links' not in x or int(x['links'])==0:
                                 data.append({key:x[key] for key in POE_NINJA_FIELDS})
-                        
-                                
+                        data[-1]['league'] = league
                 time.sleep(3)
         return data
