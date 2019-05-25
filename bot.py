@@ -207,12 +207,6 @@ async def on_ready():
     print(bot.user.id)
     print('------')
     await bot.change_presence(game=discord.Game(name='-help'))
-
-@bot.command(pass_context=True)
-async def events(ctx, *toggle : str):
-    '''<on|off>
-Turn event announcements on/off.'''
-    await announce_internals(ctx,' '.join(toggle),'event','Event announcements','events')
     
 @bot.command(pass_context=True)
 async def pin(ctx, *count : str):
@@ -329,25 +323,91 @@ Set league for pricing in this channel, options are: tmpStandard, tmpHardcore, e
         await bot.send_message(destination, 'Now pricechecking in {}.'.format(db.VALID_PC_LEAGUES[i]))
     except ValueError:
         await bot.send_message(destination, 'Not a valid league, must be one of: tmpStandard, tmpHardcore, eventStandard, eventHardcore, Standard, Hardcore')
+class Alerts:
+    '''Toggle on/off automatic annoucements of the following:'''
+    @commands.command(pass_context=True)
+    async def announcements(self, ctx, *toggle : str):
+        '''<on|off>
+    Turn forum announcements on/off.'''
+        await announce_internals(ctx,' '.join(toggle),'forumannounce','Forum news announcements','announcements')
 
-@bot.command(pass_context=True)
-async def announcements(ctx, *toggle : str):
-    '''<on|off>
-Turn forum announcements on/off.'''
-    await announce_internals(ctx,' '.join(toggle),'forumannounce','Forum news announcements','announcements')
+    @commands.command(pass_context=True,aliases=['patchnote'])
+    async def patchnotes(self, ctx, *toggle : str):
+        '''<on|off>
+    Turn patch note posts on/off.'''
+        await announce_internals(ctx,' '.join(toggle),'patchnotes','Patch note announcements','patchnotes')
+        
+    @commands.command(pass_context=True,aliases=['daily_deals'])
+    async def deals(self, ctx, *toggle : str):
+        '''<on|off>
+    Turn daily deal announcements on/off.'''
+        await announce_internals(ctx,' '.join(toggle),'dailydeal','Daily deal announcements','deals')
+        
+    @commands.command(pass_context=True)
+    async def events(self, ctx, *toggle : str):
+        '''<on|off>
+    Turn event announcements on/off.'''
+        await announce_internals(ctx,' '.join(toggle),'event','Event announcements','events')
+class Info:
+    'Show info on in-game items. These commands have one letter aliases for quicker use (ex: -u)'
+    @commands.command(pass_context=True,aliases=['u'])
+    async def unique(self, ctx, *itemname: str):
+        '''<item>
+    Shows stats for an item. Partial names acceptable.'''
+        if not len(itemname):
+            await bot.send_message(ctx.message.channel, 'usage: -u <item name>')
+            return
+        # consider showing flavor text in the embed footer
+        item = ' '.join(itemname)
+        r=bot.cursor.execute('SELECT league FROM pricecheck WHERE channel=?',(ctx.message.channel.id,))
+        league = (r.fetchone() or ('tmpStandard',))[0]
+        data = bot.db.get_data('unique_items',item,league)
+        if not data:
+            await bot.send_failure_message(ctx.message.channel)
+            return
+        if len(data)>1:
+            #send choices
+            sent_msg= await bot.send_message(ctx.message.channel, 'Multiple Results:\n'+'\n'.join(['%i. %s'%(i+1,datum['name']) for i,datum in enumerate(data)]))
+            for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
+                await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, data[i])#, _search_result, data[i][3])
+            return
+        e = _create_unique_embed(data[0])
+        await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
 
-@bot.command(pass_context=True,aliases=['patchnote'])
-async def patchnotes(ctx, *toggle : str):
-    '''<on|off>
-Turn patch note posts on/off.'''
-    await announce_internals(ctx,' '.join(toggle),'patchnotes','Patch note announcements','patchnotes')
-    
-@bot.command(pass_context=True,aliases=['daily_deals'])
-async def deals(ctx, *toggle : str):
-    '''<on|off>
-Turn daily deal announcements on/off.'''
-    await announce_internals(ctx,' '.join(toggle),'dailydeal','Daily deal announcements','deals')
-    
+    async def _search_result(msg, author, data):
+        e = _create_unique_embed(data)
+        await bot.send_deletable_message(author, msg.channel, embed=e)
+        await bot.delete_message(msg)
+
+    async def _gem_search_result(msg, author, data):
+        e = _create_gem_embed(data)
+        await bot.send_deletable_message(author, msg.channel, embed=e)
+        await bot.delete_message(msg)
+        
+    @commands.command(pass_context=True,aliases=['s'])
+    async def skill(self, ctx, *skill_name: str):
+        '''<skill>
+    Shows stats for a skill gem. Partial names acceptable.'''
+        if not len(skill_name):
+            await bot.send_message(ctx.message.channel, 'usage: -s <skill gem name>')
+            return
+        # consider showing flavor text in the embed footer
+        item = ' '.join(skill_name)
+        r=bot.cursor.execute('SELECT league FROM pricecheck WHERE channel=?',(ctx.message.channel.id,))
+        league = (r.fetchone() or ('tmpStandard',))[0]
+        data = bot.db.get_data('skill_gems',item,league)
+        if not data:
+            await bot.send_failure_message(ctx.message.channel)
+            return
+        if len(data)>1:
+            #send choices
+            sent_msg= await bot.send_message(ctx.message.channel, 'Multiple Results:\n'+'\n'.join(['%i. %s'%(i+1,datum['name']) for i,datum in enumerate(data)]))
+            for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
+                await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _gem_search_result, data[i])#, _search_result, data[i][3])
+            return
+        e = _create_gem_embed(data[0])
+        await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
+        
 @bot.command(pass_context=True,aliases=['nextrace','nextevent'])
 async def next(ctx):
     '''Displays the upcoming race.'''
@@ -357,62 +417,7 @@ async def next(ctx):
     else:
         await bot.send_message(ctx.message.channel, 'No upcoming events.')
 
-@bot.command(pass_context=True,aliases=['u'])
-async def unique(ctx, *itemname: str):
-    '''Shows stats for an item.'''
-    if not len(itemname):
-        await bot.send_message(ctx.message.channel, 'usage: -u <item name>')
-        return
-    # consider showing flavor text in the embed footer
-    item = ' '.join(itemname)
-    r=bot.cursor.execute('SELECT league FROM pricecheck WHERE channel=?',(ctx.message.channel.id,))
-    league = (r.fetchone() or ('tmpStandard',))[0]
-    data = bot.db.get_data('unique_items',item,league)
-    if not data:
-        await bot.send_failure_message(ctx.message.channel)
-        return
-    if len(data)>1:
-        #send choices
-        sent_msg= await bot.send_message(ctx.message.channel, 'Multiple Results:\n'+'\n'.join(['%i. %s'%(i+1,datum['name']) for i,datum in enumerate(data)]))
-        for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
-            await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, data[i])#, _search_result, data[i][3])
-        return
-    e = _create_unique_embed(data[0])
-    await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
 
-async def _search_result(msg, author, data):
-    e = _create_unique_embed(data)
-    await bot.send_deletable_message(author, msg.channel, embed=e)
-    await bot.delete_message(msg)
-
-async def _gem_search_result(msg, author, data):
-    e = _create_gem_embed(data)
-    await bot.send_deletable_message(author, msg.channel, embed=e)
-    await bot.delete_message(msg)
-    
-@bot.command(pass_context=True,aliases=['s'])
-async def skill(ctx, *skill_name: str):
-    '''Shows stats for a skill gem.'''
-    if not len(skill_name):
-        await bot.send_message(ctx.message.channel, 'usage: -s <skill gem name>')
-        return
-    # consider showing flavor text in the embed footer
-    item = ' '.join(skill_name)
-    r=bot.cursor.execute('SELECT league FROM pricecheck WHERE channel=?',(ctx.message.channel.id,))
-    league = (r.fetchone() or ('tmpStandard',))[0]
-    data = bot.db.get_data('skill_gems',item,league)
-    if not data:
-        await bot.send_failure_message(ctx.message.channel)
-        return
-    if len(data)>1:
-        #send choices
-        sent_msg= await bot.send_message(ctx.message.channel, 'Multiple Results:\n'+'\n'.join(['%i. %s'%(i+1,datum['name']) for i,datum in enumerate(data)]))
-        for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
-            await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _gem_search_result, data[i])#, _search_result, data[i][3])
-        return
-    e = _create_gem_embed(data[0])
-    await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
-    
 def _create_unique_embed(data):
     def if_not_zero(val,label):
         if val and val!='0':
@@ -435,16 +440,14 @@ def _create_unique_embed(data):
             stats_string = 'Est. Price: {0:.0f}c\n'.format(data['chaosValue'])
     else:
         stats_string = ''
-    # leading \n are automatically removed. you can use htis to your advantage if you're careful how you place these.
+    # leading \n are automatically removed by discord. you can use this to your advantage if you're careful how you place these.
     stats_string+="{}".format(if_not_zero(data['block'],'Chance to Block:'))
     #stats for armour pieces:
     stats_string+="{}{}{}".format(if_not_zero(data['armour'],'Armour:'), if_not_zero(data['eva'],'Evasion:'), if_not_zero(data['es'],'Energy Shield:'))
     #stats for weapons
-    # base damage. this is the biggest pain.
     for dtype in [('Physical Damage:','phys'),('Fire Damage:','fire'),('Cold Damage:','Cold'),('Lightning Damage:','light'),('Chaos Damage:','chaos')]:
         if data[dtype[1]+'max'] and data[dtype[1]+'max']!='0':
             stats_string+='{} {}-{}\n'.format(dtype[0],data[dtype[1]+'min'],data[dtype[1]+'max'])
-##    if data['aspd']: # this should be common to all weapons
     stats_string+="{}{}{}".format(if_not_zero(data['crit'],'Critical Strike Chance:'), if_not_zero(data['aspd'],'Attacks per Second:'), if_not_zero(data['range'],'Weapon Range:'))
     #stats for flasks
     if data['flaskduration']:
@@ -454,18 +457,14 @@ def _create_unique_embed(data):
     reqs = [s for s in [stat_not_one(data['levelreq'],'Level'),stat_not_zero(data['strreq'],'Str'),stat_not_zero(data['dexreq'],'Dex'),stat_not_zero(data['intreq'],'Int')] if s]
     if reqs and data['name']!='Tabula Rasa':
         stats_string+='Requires {}'.format(', '.join(reqs))
-##    stats_string+='{}{}{}{}'.format('Requires Level '+data['levelreq'] if data['levelreq']!='1' else '', stat_not_zero(data['strreq'],'Str'),stat_not_zero(data['dexreq'],'Dex'),stat_not_zero(data['intreq'],'Int'))
     stats_string+='{}'.format(if_not_zero(data['jewellimit'],'Limited To:'))
     stats_string+='{}'.format(data['jewelradius'])
     
     stats_string=bold_nums.sub(r'**\1**', stats_string).replace('****','')
     e = discord.Embed(url='https://pathofexile.gamepedia.com/{}'.format(data['name'].replace(' ','_')),
-        description=stats_string,#"Requires Level {}, {} Int\n400 EGs".format(data['levelreq'],data['intreq']),
+        description=stats_string,
         title='\n'.join((data['name'].strip(),data['baseitem'].strip())),
         type='rich',color=0xaf6025)
-##    e.set_image(url=data['image_url'])
-##    if data['thumbnail_url']:
-##        e.set_thumbnail(url=data['thumbnail_url'])
     if 'icon' in data.keys() and data['icon']:
         e.set_thumbnail(url=data['icon'].replace(' ','%20'))
     if data['impl'] or data['expl']: #this is only for tabula
@@ -510,7 +509,6 @@ def _create_gem_embed(data):
     if int(data['is_res']):
         stats_string+='Mana Reserved: {}%\n'.format(data['mana_cost'])
 ##        stats_string+='Mana Reserved: {}\n'.format(data['is_res'])
-##        stats_string+='Mana Reserved: yes [broken wiki]\n'
     elif data['mana_cost']:
         if data['mana_cost_max']:
             stats_string+='Mana Cost: ({}-{})\n'.format(data['mana_cost'],data['mana_cost_max'])
@@ -666,11 +664,10 @@ if __name__ =='__main__':
              (channel int PRIMARY KEY,
              league text)''')
     bot.conn.commit()
-    with open('token','r') as f:
-##        bot.loop.create_task(cleanup_reactions())
-##        bot.loop.create_task(forum_announcements())
-##        bot.run(f.read())
 
+    bot.add_cog(Alerts())
+    bot.add_cog(Info())
+    with open('token','r') as f:
         # if any (background) task raises an exception, end this bot.
         tasks = [bot.start(f.read()),bot.loop.create_task(cleanup_reactions()),bot.loop.create_task(forum_announcements())]
         bot.loop.run_until_complete(asyncio.gather(*tasks))
