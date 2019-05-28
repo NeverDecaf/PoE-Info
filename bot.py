@@ -373,16 +373,6 @@ class Info:
             return
         e = _create_unique_embed(data[0])
         await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
-
-    async def _search_result(msg, author, data):
-        e = _create_unique_embed(data)
-        await bot.send_deletable_message(author, msg.channel, embed=e)
-        await bot.delete_message(msg)
-
-    async def _gem_search_result(msg, author, data):
-        e = _create_gem_embed(data)
-        await bot.send_deletable_message(author, msg.channel, embed=e)
-        await bot.delete_message(msg)
         
     @commands.command(pass_context=True,aliases=['s'])
     async def skill(self, ctx, *skill_name: str):
@@ -407,6 +397,16 @@ class Info:
             return
         e = _create_gem_embed(data[0])
         await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
+
+async def _search_result(msg, author, data):
+    e = _create_unique_embed(data)
+    await bot.send_deletable_message(author, msg.channel, embed=e)
+    await bot.delete_message(msg)
+
+async def _gem_search_result(msg, author, data):
+    e = _create_gem_embed(data)
+    await bot.send_deletable_message(author, msg.channel, embed=e)
+    await bot.delete_message(msg)
         
 @bot.command(pass_context=True,aliases=['nextrace','nextevent'])
 async def next(ctx):
@@ -451,7 +451,8 @@ def _create_unique_embed(data):
     stats_string+="{}{}{}".format(if_not_zero(data['crit'],'Critical Strike Chance:'), if_not_zero(data['aspd'],'Attacks per Second:'), if_not_zero(data['range'],'Weapon Range:'))
     #stats for flasks
     if data['flaskduration']:
-        stats_string+="Lasts {0:.2f} Seconds\n".format(float(data['flaskduration']))
+        stats_string+="Lasts {} Seconds\n".format(data['flaskduration'])
+##        stats_string+="Lasts {0:.2f} Seconds\n".format(float(data['flaskduration']))
         stats_string+="Consumes {} of {} charges on use\n".format(data['flaskchargesused'],data['flaskcharges'])
     # level and stat requirements
     reqs = [s for s in [stat_not_one(data['levelreq'],'Level'),stat_not_zero(data['strreq'],'Str'),stat_not_zero(data['dexreq'],'Dex'),stat_not_zero(data['intreq'],'Int')] if s]
