@@ -560,9 +560,9 @@ def _create_gem_embed(data):
         title=data['name'],
         type='rich',color=gemcolor)
     e.add_field(name=data['tags'],value=stats_string,inline=False)
-    
-    if data['thumbnail_url']:
-        e.set_thumbnail(url=data['thumbnail_url'])
+
+    if 'icon' in data.keys() and data['icon']:
+        e.set_thumbnail(url=data['icon'].replace(' ','%20'))
         
     if data['qual_bonus'] and data['stat_text']:
         e.add_field(name='Per 1% Quality:',value=bold_nums.sub(r'**\1**', '{}\n\n{}'.format(data['qual_bonus'],data['stat_text']).replace('<br>','\n')).replace('****',''),inline=False)
