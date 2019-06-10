@@ -9,6 +9,7 @@ import requests, re, datetime, time, json, os
 import urllib.parse as urlparse
 import html
 import time
+from json.decoder import JSONDecodeError
 
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
@@ -358,7 +359,10 @@ def get_ninja_prices(league='tmpStandard'):
         for itemtype in endpoints:
                 r = requests.get(api.format(itemtype[0],league,itemtype[1]))
                 r.encoding = 'utf-8'
-                rj = r.json()
+                try:
+                        rj = r.json()
+                except JSONDecodeError:
+                        return None
                 for x in rj['lines']:
                         if int(x['itemClass'])==4:
                                 if x['name'].startswith('Vaal ') and int(x['gemLevel'])==20 and int(x['gemQuality'])==20:

@@ -136,8 +136,10 @@ if __name__=='__main__':
         a.add_item(gem,'skill_gems')
     # get poe.ninja data (mainly for price)
     for league in VALID_PC_LEAGUES:
-        for datum in scrape_poe_wiki.get_ninja_prices(league):
-            a.add_item(datum,'ninja_data')
+        data = scrape_poe_wiki.get_ninja_prices(league)
+        if data:
+            for datum in data:
+                a.add_item(datum,'ninja_data')
     a._scrape_events()
     a.close()
 
