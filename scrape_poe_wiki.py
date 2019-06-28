@@ -31,20 +31,13 @@ since the style variants ingame all have the same name, we want to filter these 
 put in a manually prepared version that covers all styles in one overview. 
 """
 
-regex_wiki_veiled = re.compile(r'<span class="text-color -craft"><([^>]*)></span>')
-"""
-matches items named "item name (disambiguation)" and stores "item name" as capture group 1.
-this format is used in the wiki to distinguish style variants of items, giving each variant its own page.
-since the style variants ingame all have the same name, we want to filter these out and
-put in a manually prepared version that covers all styles in one overview. 
-"""
+regex_wiki_markup = re.compile(r'<[^>]*class="[^"]*"[^>]*><([^>]*)></[^>]*>')
 
 def remove_wiki_formats(text):
         if text is None:
                 return None
         text = regex_wikilinks.sub(r'\1\2', text)       # remove wiki links with regular expression. See the start of the script.
-        text = regex_wiki_veiled.sub(r'\1', text) # remove veiled mods markup
-        text = text.replace('<em class="tc -corrupted">Corrupted</em>', 'Corrupted')    # remove corrupted markup
+        text = regex_wiki_markup.sub(r'**\1**', text) # remove wiki markup, covers veiled mods and corrupted text, will also bold for embed
         text = text.replace('&#60;', '<').replace('&#62;', '>')
         return text
 
