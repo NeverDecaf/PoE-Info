@@ -14,6 +14,7 @@ import urllib.parse as urlparse
 from lxml import html as lxmlhtml
 import datetime
 import io,shutil # for copying pins
+import json,hashlib # for daily deal
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
@@ -600,28 +601,33 @@ async def scrape_forum(section = 'https://www.pathofexile.com/forum/view-forum/n
             announces.append(_create_forum_embed(thread[1],thread[0],header))
     return announces
 
-async def scrape_deals(deals = 'https://www.pathofexile.com/shop/category/daily-deals'):
+async def scrape_deals(deal_api = 'https://www.pathofexile.com/api/shop/microtransactions/specials?limit=9999'):
+    r=bot.cursor.execute('''select 1 from daily_deals where datetime(end_date)>datetime('now')''')
+    if r.fetchone(): #ongoing deal, no need to check for new ones.
+        return None
     loop = asyncio.get_event_loop() # could also use bot.loop or whatever it is
-    future = loop.run_in_executor(None, requests.get, deals)
+    future = loop.run_in_executor(None, requests.get, deal_api)
     data = await future
-    etree = lxmlhtml.fromstring(data.text)
-    itemnames = [a.strip() for a in etree.xpath('//a[contains(@class,"itemImage")]/@alt')]
-    im_urls = etree.xpath('//a[contains(@class,"itemImage")]/@data-href')
-    import hashlib
-    now = datetime.datetime.now()
-    itemhash = hashlib.md5(str(itemnames).encode('utf8')).digest()
+    data.raise_for_status()
+    js = data.json()
+    if js['total'] == 0:
+        return None
+    itemnames = [i['microtransaction']['name'] for i in js['entries'][::-1]]
+    itemhash = hashlib.md5(json.dumps(js).encode('utf8')).hexdigest()
+    img_url = js['entries'][-1]['imageUrl']
+    end_date = js['entries'][-1]['endAt']
     title = ' | '.join(itemnames[:2])
     if len(itemnames) >2:
         title += ' | + %i more'%(len(itemnames)-2)
     r=bot.cursor.execute('SELECT 1 FROM daily_deals WHERE hash=?',(itemhash,))
-    if r.fetchone() or not im_urls:
+    if r.fetchone():
         return None
     else:
         #announce.
-        bot.cursor.execute('REPLACE INTO daily_deals (title,img_url,hash) VALUES (?,?,?)',(title,im_urls[0],itemhash))
+        bot.cursor.execute('REPLACE INTO daily_deals (title,img_url,hash,end_date) VALUES (?,?,?,?)',(title,img_url,itemhash,end_date))
         bot.cursor.execute('''DELETE FROM daily_deals WHERE ROWID IN (SELECT ROWID FROM daily_deals ORDER BY ROWID DESC LIMIT -1 OFFSET 7)''')
         bot.conn.commit()
-        return (_create_deal_embed(title,im_urls[0]),)
+        return (_create_deal_embed(title,img_url),)
 
 def _create_forum_embed(url,title,name='Forum Announcement'):
     e = discord.Embed(url=url,
@@ -658,6 +664,10 @@ if __name__ =='__main__':
              (title text,
              img_url text,
              hash text PRIMARY KEY)''')
+    try:
+        bot.cursor.execute('''ALTER TABLE daily_deals ADD COLUMN end_date real''')
+    except sqlite3.OperationalError:
+        pass
     bot.cursor.execute('''CREATE TABLE IF NOT EXISTS pins
              (source int PRIMARY KEY,
              dest int)''')
