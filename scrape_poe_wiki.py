@@ -112,6 +112,7 @@ def format_affixes(item_list):
 SKILL_GEM_VARIABLE_FIELDS={
                 #skill_levels fields
 ##                'skill_levels.stat_text':'stat_text', # use the one from `skill` as it already has ranges
+                'skill_levels.attack_speed_multiplier':'attack_speed_multiplier',
                 'skill_levels.cooldown':'cooldown',
                 'skill_levels.critical_strike_chance':'crit_chance',
                 'skill_levels.damage_effectiveness':'damage_effectiveness',
@@ -371,4 +372,22 @@ def get_ninja_prices(league='tmpStandard'):
                                 data.append({key:x[key] for key in POE_NINJA_FIELDS})
                         data[-1]['league'] = league
                 time.sleep(3)
+        return data
+def get_ninja_rates(league='tmpStandard'):
+        '''use poe.ninja api to get currency prices'''
+        data=[]
+        api = 'https://poe.ninja/api/data/itemoverview?league={}&type=Currency'
+        r = requests.get(api.format(league))
+        r.encoding = 'utf-8'
+        try:
+                rj = r.json()
+        except JSONDecodeError:
+                return None
+        id_map = {}
+        for x in rj['currencyDetails']:
+                id_map[x['name']] = (x['id'],x['icon'])
+        for x in rj['lines']:
+                data.append({'name':x['currencyTypeName'], 'chaosValue':x['chaosEquivalent']})
+                data[-1]['id'],data[-1]['icon'] = id_map[x['currencyTypeName']]
+                data[-1]['league'] = league
         return data

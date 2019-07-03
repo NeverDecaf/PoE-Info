@@ -38,6 +38,8 @@ class PoeDB:
                  (id text primary key, startAt timestamp, endAt timestamp, url text)''')
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS ninja_data
                  (id integer, name text, icon text, chaosValue real, exaltedValue real, itemClass integer, league text, PRIMARY KEY (id,league))''')
+        self.cursor.execute('''CREATE TABLE IF NOT EXISTS ninja_currency_data
+                 (id integer, name text, icon text, chaosValue real, league text, PRIMARY KEY (id,league))''')
         self.conn.commit()
 
     def add_item(self,data,table='unique_items'):
@@ -50,6 +52,11 @@ class PoeDB:
     def get_data(self,tablename,searchname,league,limit = 9, search_by_baseitem = False):
         query = '''SELECT * FROM {} left join ninja_data on {}.name=ninja_data.name AND ninja_data.league=? COLLATE NOCASE WHERE {}.{} COLLATE NOCASE LIKE "%"||?||"%" LIMIT {}'''.format(tablename,tablename,tablename,'baseitem' if search_by_baseitem else 'name', limit)
         res=self.cursor.execute(query,(league,searchname.lower(),))
+        return res.fetchall()
+    
+    def get_currency(self,searchname,league,limit = 9):
+        query = '''SELECT * FROM ninja_currency_data WHERE ninja_currency_data.league=? COLLATE NOCASE AND ninja_currency_data.name COLLATE NOCASE LIKE "%"||?||"%" LIMIT ?'''
+        res=self.cursor.execute(query,(league,searchname.lower(),limit))
         return res.fetchall()
     
     def upcoming_event(self,warning_intervals=[5]):
@@ -120,27 +127,36 @@ class PoeDB:
         self.cursor.execute('''DELETE FROM unique_items''')
         self.cursor.execute('''DELETE FROM skill_gems''')
         self.cursor.execute('''DELETE FROM ninja_data''')
+        self.cursor.execute('''DELETE FROM ninja_currency_data''')
         self.conn.commit()
 
 if __name__=='__main__':
     import sys
     
-    a = PoeDB()
+    a = PoeDB()                
     if len(sys.argv)>1 and sys.argv[1]=='-r':
         a.reset()
-    #scrape uniques
-    for unique in scrape_poe_wiki.format_affixes(scrape_poe_wiki.scrape_unique_items()):
-        a.add_item(unique)
-    #scrape skill gems
-    for gem in scrape_poe_wiki.scrape_skill_gems():
-        a.add_item(gem,'skill_gems')
+    if len(sys.argv)>1 and sys.argv[1]=='-pc':
+        pass #pricecheck only
+    else:
+        #scrape uniques
+        for unique in scrape_poe_wiki.format_affixes(scrape_poe_wiki.scrape_unique_items()):
+            a.add_item(unique)
+        #scrape skill gems
+        for gem in scrape_poe_wiki.scrape_skill_gems():
+            a.add_item(gem,'skill_gems')
+        a._scrape_events()
     # get poe.ninja data (mainly for price)
     for league in VALID_PC_LEAGUES:
         data = scrape_poe_wiki.get_ninja_prices(league)
         if data:
             for datum in data:
                 a.add_item(datum,'ninja_data')
-    a._scrape_events()
+    for league in VALID_PC_LEAGUES:
+        data = scrape_poe_wiki.get_ninja_rates(league)
+        if data:
+            for datum in data:
+                a.add_item(datum,'ninja_currency_data')   
     a.close()
 
 

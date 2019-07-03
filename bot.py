@@ -15,6 +15,8 @@ from lxml import html as lxmlhtml
 import datetime
 import io,shutil # for copying pins
 import json,hashlib # for daily deal
+from fractions import Fraction
+import math
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
@@ -372,7 +374,7 @@ class Info:
             #send choices
             sent_msg= await bot.send_message(ctx.message.channel, 'Multiple Results:\n'+'\n'.join(['%i. %s'%(i+1,datum['name']) for i,datum in enumerate(data)]))
             for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
-                await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, data[i])#, _search_result, data[i][3])
+                await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, data[i], _create_unique_embed)#, _search_result, data[i][3])
             return
         e = _create_unique_embed(data[0])
         await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
@@ -396,21 +398,40 @@ class Info:
             #send choices
             sent_msg= await bot.send_message(ctx.message.channel, 'Multiple Results:\n'+'\n'.join(['%i. %s'%(i+1,datum['name']) for i,datum in enumerate(data)]))
             for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
-                await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _gem_search_result, data[i])#, _search_result, data[i][3])
+                await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, data[i], _create_gem_embed)#, _search_result, data[i][3])
             return
         e = _create_gem_embed(data[0])
         await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
-
-async def _search_result(msg, author, data):
-    e = _create_unique_embed(data)
-    await bot.send_deletable_message(author, msg.channel, embed=e)
-    await bot.delete_message(msg)
-
-async def _gem_search_result(msg, author, data):
-    e = _create_gem_embed(data)
-    await bot.send_deletable_message(author, msg.channel, embed=e)
-    await bot.delete_message(msg)
         
+    @commands.command(pass_context=True,aliases=['c'])
+    async def currency(self, ctx, *currency_name: str):
+        '''<name>
+    Shows exchange rate for a currency item. Partial names acceptable.'''
+        if not len(currency_name):
+            await bot.send_message(ctx.message.channel, 'usage: -c <currency name>')
+            return
+        # consider showing flavor text in the embed footer
+        item = ' '.join(currency_name)
+        r=bot.cursor.execute('SELECT league FROM pricecheck WHERE channel=?',(ctx.message.channel.id,))
+        league = (r.fetchone() or ('tmpStandard',))[0]
+        data = bot.db.get_currency(item,league)
+        if not data:
+            await bot.send_failure_message(ctx.message.channel)
+            return
+        if len(data)>1:
+            #send choices
+            sent_msg= await bot.send_message(ctx.message.channel, 'Multiple Results:\n'+'\n'.join(['%i. %s'%(i+1,datum['name']) for i,datum in enumerate(data)]))
+            for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
+                await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, data[i], _create_currency_embed)#, _search_result, data[i][3])
+            return
+        e = _create_currency_embed(data[0])
+        await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
+        
+async def _search_result(msg, author, data, _func):
+    e = _func(data)
+    await bot.send_deletable_message(author, msg.channel, embed=e)
+    await bot.delete_message(msg)
+    
 @bot.command(pass_context=True,aliases=['nextrace','nextevent'])
 async def next(ctx):
     '''Displays the upcoming race.'''
@@ -420,6 +441,19 @@ async def next(ctx):
     else:
         await bot.send_message(ctx.message.channel, 'No upcoming events.')
 
+def _create_currency_embed(data):
+    price = data['chaosValue']
+    chaos_to_spend = 20
+    limit = math.ceil(chaos_to_spend/price)
+    frac = Fraction(data['chaosValue']).limit_denominator(int(limit))
+    stats_string = 'Est. Price: **{}**c\napprox. **{}** : **{}**c'.format(price,frac.denominator,frac.numerator)
+    e = discord.Embed(url='https://pathofexile.gamepedia.com/{}'.format(data['name'].replace(' ','_')),
+        description=stats_string,
+        title=data['name'].strip(),
+        type='rich',color=0x638000)
+    if 'icon' in data.keys() and data['icon']:
+        e.set_thumbnail(url=data['icon'].replace(' ','%20'))
+    return e
 
 def _create_unique_embed(data):
     def if_not_zero(val,label):
