@@ -364,8 +364,10 @@ class Info:
         league = (r.fetchone() or ('tmpStandard',))[0]
         data = bot.db.get_data('unique_items',item,league)
         if not data:
-            await bot.send_failure_message(ctx.message.channel)
-            return
+            data = bot.db.get_data('unique_items',item,league,search_by_baseitem=True)
+            if not data:
+                await bot.send_failure_message(ctx.message.channel)
+                return
         if len(data)>1:
             #send choices
             sent_msg= await bot.send_message(ctx.message.channel, 'Multiple Results:\n'+'\n'.join(['%i. %s'%(i+1,datum['name']) for i,datum in enumerate(data)]))

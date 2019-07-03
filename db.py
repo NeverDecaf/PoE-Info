@@ -47,8 +47,8 @@ class PoeDB:
         self.cursor.execute(query, [v if v==None else html.unescape(str(v)) for v in list(data.values())])
         self.conn.commit()
         
-    def get_data(self,tablename,searchname,league,limit = 9):
-        query = '''SELECT * FROM {} left join ninja_data on {}.name=ninja_data.name AND ninja_data.league=? COLLATE NOCASE WHERE {}.name COLLATE NOCASE LIKE "%"||?||"%" LIMIT {}'''.format(tablename,tablename,tablename,limit)
+    def get_data(self,tablename,searchname,league,limit = 9, search_by_baseitem = False):
+        query = '''SELECT * FROM {} left join ninja_data on {}.name=ninja_data.name AND ninja_data.league=? COLLATE NOCASE WHERE {}.{} COLLATE NOCASE LIKE "%"||?||"%" LIMIT {}'''.format(tablename,tablename,tablename,'baseitem' if search_by_baseitem else 'name', limit)
         res=self.cursor.execute(query,(league,searchname.lower(),))
         return res.fetchall()
     
