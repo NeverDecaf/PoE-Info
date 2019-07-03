@@ -564,6 +564,8 @@ def _create_gem_embed(data):
         stats_string+='Critical Strike Chance: {}%\n'.format(data['crit_chance'])
     if data['proj_speed']:
         stats_string+='Projectile Speed: {}\n'.format(data['proj_speed'])
+    if data['attack_speed_multiplier']:
+        stats_string+='Attack Speed: {}% of base\n'.format(data['attack_speed_multiplier'])
     if data['damage_effectiveness_max'] and data['damage_effectiveness']:
         stats_string+='Damage Effectiveness: ({}-{})%\n'.format(data['damage_effectiveness'],data['damage_effectiveness_max'])
     if data['level_requirement']:

@@ -112,7 +112,6 @@ def format_affixes(item_list):
 SKILL_GEM_VARIABLE_FIELDS={
                 #skill_levels fields
 ##                'skill_levels.stat_text':'stat_text', # use the one from `skill` as it already has ranges
-                'skill_levels.attack_speed_multiplier':'attack_speed_multiplier',
                 'skill_levels.cooldown':'cooldown',
                 'skill_levels.critical_strike_chance':'crit_chance',
                 'skill_levels.damage_effectiveness':'damage_effectiveness',
@@ -140,6 +139,7 @@ SKILL_GEM_PROPERTY_MAPPING=dict(
                 'skill_gems.intelligence_percent':'int_percent',
                 'skill_gems.strength_percent':'str_percent',
                 #skill fields:
+                'skill_levels.attack_speed_multiplier':'attack_speed_multiplier',
                 'skill.skill_icon':'image_url',
                 'skill.has_reservation_mana_cost':'is_res',
                 'skill.quality_stat_text':'qual_bonus',
