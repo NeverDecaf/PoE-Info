@@ -295,7 +295,7 @@ def scrape_unique_items(limit=50000):
         while rowindex<limit:
                 query = 'https://pathofexile.gamepedia.com/api.php?action=cargoquery&format=json&tables=items,weapons,shields,armours,jewels,flasks&join_on=items._pageName=weapons._pageName,items._pageName=shields._pageName,items._pageName=armours._pageName'+\
                         ',items._pageName=jewels._pageName,items._pageName=flasks._pageName'+\
-                        '&fields='+','.join(['='.join((k,v)) for k,v in UNIQUE_ITEM_PROPERTY_MAPPING.items()])+',items._rowID=rowid&where=rarity=\'Unique\' AND items._rowID>={}{}&group_by=items._pageName&order_by=items._rowID&limit={}'.format(last_rowid+1," AND name like '%diadem%'",query_limit)
+                        '&fields='+','.join(['='.join((k,v)) for k,v in UNIQUE_ITEM_PROPERTY_MAPPING.items()])+',items._rowID=rowid&where=rarity=\'Unique\' AND items._rowID>={}&group_by=items._pageName&order_by=items._rowID&limit={}'.format(last_rowid+1,query_limit)
                 # need to fetch in batches of 500 (the limit for one query)
                 # we will use _rowID to do this, continue querying until we get 0 results
                 # this isnt 100% safe but it should work unless someone does something to really break the db.
