@@ -640,9 +640,9 @@ async def scrape_forum(section = 'https://www.pathofexile.com/forum/view-forum/n
     return announces
 
 async def scrape_deals(deal_api = 'https://www.pathofexile.com/api/shop/microtransactions/specials?limit=9999'):
-    r=bot.cursor.execute('''select 1 from daily_deals where datetime(end_date)>datetime('now')''')
-    if r.fetchone(): #ongoing deal, no need to check for new ones.
-        return None
+##    r=bot.cursor.execute('''select 1 from daily_deals where datetime(end_date)>datetime('now')''')
+##    if r.fetchone(): #ongoing deal, no need to check for new ones.
+##        return None
     loop = asyncio.get_event_loop() # could also use bot.loop or whatever it is
     future = loop.run_in_executor(None, requests.get, deal_api)
     data = await future
