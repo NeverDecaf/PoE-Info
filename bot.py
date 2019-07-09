@@ -651,7 +651,7 @@ async def scrape_deals(deal_api = 'https://www.pathofexile.com/api/shop/microtra
     if js['total'] == 0:
         return None
     itemnames = [i['microtransaction']['name'] for i in js['entries'][::-1]]
-    itemhash = hashlib.md5(json.dumps(js).encode('utf8')).hexdigest()
+    itemhash = hashlib.md5(json.dumps(js, sort_keys=True).encode('utf8')).hexdigest()
     img_url = js['entries'][-1]['imageUrl']
     end_date = js['entries'][-1]['endAt']
     title = ' | '.join(itemnames[:2])
