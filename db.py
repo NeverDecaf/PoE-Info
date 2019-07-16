@@ -48,6 +48,17 @@ class PoeDB:
         query = '''REPLACE INTO %s (%s) VALUES (%s)''' % (table, columns, placeholders)
         self.cursor.execute(query, [v if v==None else html.unescape(str(v)) for v in list(data.values())])
         self.conn.commit()
+
+    def add_items_async(self,data,table='unique_items'):
+        self.cursor.execute('''CREATE TEMP TABLE {}_tmp AS SELECT * FROM {} LIMIT 0'''.format(table,table))
+        for datum in data:
+            columns = ', '.join(datum.keys())
+            placeholders = ', '.join(['?']*len(datum.values()))
+            query = '''REPLACE INTO {}_tmp ({}) VALUES ({})'''.format(table, columns, placeholders)
+            self.cursor.execute(query, [v if v==None else html.unescape(str(v)) for v in list(datum.values())])
+        self.cursor.execute('''REPLACE INTO {} SELECT * FROM {}_tmp'''.format(table,table))
+        self.cursor.execute('''DROP TABLE {}_tmp'''.format(table))
+        self.conn.commit()
         
     def get_data(self,tablename,searchname,league,limit = 9, search_by_baseitem = False):
         query = '''SELECT * FROM {} left join ninja_data on {}.name=ninja_data.name AND ninja_data.league=? COLLATE NOCASE WHERE {}.{} COLLATE NOCASE LIKE "%"||?||"%" LIMIT {}'''.format(tablename,tablename,tablename,'baseitem' if search_by_baseitem else 'name', limit)
@@ -133,30 +144,26 @@ class PoeDB:
 if __name__=='__main__':
     import sys
     
-    a = PoeDB()                
+    a = PoeDB()
     if len(sys.argv)>1 and sys.argv[1]=='-r':
         a.reset()
     if len(sys.argv)>1 and sys.argv[1]=='-pc':
         pass #pricecheck only
     else:
         #scrape uniques
-        for unique in scrape_poe_wiki.format_affixes(scrape_poe_wiki.scrape_unique_items()):
-            a.add_item(unique)
+        a.add_items_async(scrape_poe_wiki.format_affixes(scrape_poe_wiki.scrape_unique_items()))
         #scrape skill gems
-        for gem in scrape_poe_wiki.scrape_skill_gems():
-            a.add_item(gem,'skill_gems')
+        a.add_items_async(scrape_poe_wiki.scrape_skill_gems(),'skill_gems')
+        #scape events (RIP)
         a._scrape_events()
     # get poe.ninja data (mainly for price)
     for league in VALID_PC_LEAGUES:
         data = scrape_poe_wiki.get_ninja_prices(league)
         if data:
-            for datum in data:
-                a.add_item(datum,'ninja_data')
-    for league in VALID_PC_LEAGUES:
+            a.add_items_async(data,'ninja_data')
         data = scrape_poe_wiki.get_ninja_rates(league)
         if data:
-            for datum in data:
-                a.add_item(datum,'ninja_currency_data')   
+            a.add_items_async(data,'ninja_currency_data')
     a.close()
 
 
