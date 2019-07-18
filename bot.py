@@ -650,13 +650,17 @@ async def scrape_deals(deal_api = 'https://www.pathofexile.com/api/shop/microtra
     js = data.json()
     if js['total'] == 0:
         return None
-    itemnames = [i['microtransaction']['name'] for i in js['entries'][::-1]]
     itemhash = hashlib.md5(json.dumps(js, sort_keys=True).encode('utf8')).hexdigest()
-    img_url = js['entries'][-1]['imageUrl']
-    end_date = js['entries'][-1]['endAt']
-    title = ' | '.join(itemnames[:2])
-    if len(itemnames) >2:
-        title += ' | + %i more'%(len(itemnames)-2)
+
+    start_dates = set([i['startAt'] for i in js['entries']])
+    latest_deal = sorted(start_dates)[-1]
+    latest_deals = sorted([i for i in js['entries'] if i['startAt']==latest_deal], key=lambda x: x['priority'], reverse=True)
+    
+    img_url = latest_deals[-1]['imageUrl']
+    end_date = latest_deals[-1]['endAt'] # end date isn't accurate as deals could have different end dates.
+    title = ' | '.join([x['microtransaction']['name'] for x in latest_deals][:2])
+    if int(js['total']) >2:
+        title += ' | + %i more'%(int(js['total'])-2)
     r=bot.cursor.execute('SELECT 1 FROM daily_deals WHERE hash=?',(itemhash,))
     if r.fetchone():
         return None
