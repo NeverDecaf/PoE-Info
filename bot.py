@@ -656,8 +656,8 @@ async def scrape_deals(deal_api = 'https://www.pathofexile.com/api/shop/microtra
     latest_deal = sorted(start_dates)[-1]
     latest_deals = sorted([i for i in js['entries'] if i['startAt']==latest_deal], key=lambda x: x['priority'], reverse=True)
     
-    img_url = latest_deals[-1]['imageUrl']
-    end_date = latest_deals[-1]['endAt'] # end date isn't accurate as deals could have different end dates.
+    img_url = latest_deals[0]['imageUrl']
+    end_date = latest_deals[0]['endAt'] # end date isn't accurate as deals could have different end dates.
     title = ' | '.join([x['microtransaction']['name'] for x in latest_deals][:2])
     if int(js['total']) >2:
         title += ' | + %i more'%(int(js['total'])-2)
