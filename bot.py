@@ -183,7 +183,7 @@ async def forum_announcements():
     await bot.wait_until_login() # just in case .is_closed is true before login.
     while not bot.is_closed:
         announce_types = [('forumannounce',partial(scrape_forum)),
-                          ('patchnotes',partial(scrape_forum,'https://www.pathofexile.com/forum/view-forum/patch-notes','patch_notes','Patch Notes')),
+                          ('patchnotes',partial(scrape_forum,'https://www.pathofexile.com/forum/view-forum/patch-notes','patch_notes','Forum - Patch Notes')),
                            ('dailydeal',partial(scrape_deals))]
         for name,func in announce_types:
             try:
@@ -196,9 +196,10 @@ async def forum_announcements():
                                 await bot.send_message(discord.Object(id=channel), embed=e)
                         except:
                             'channel missing or bot is blocked'
+##                            raise
             except Exception as e:
                 print('error scraping forums (%s): %r'%(name,e))
-                raise
+##                raise
                 'just for extra safety because an error here means the loop stops'
                 'this can be caused by things like maintenance'
         await asyncio.sleep(60)
@@ -613,7 +614,7 @@ def _create_gem_embed(data):
     return e
 
 # will return a list of embeds for all "unread" announcements
-async def scrape_forum(section = 'https://www.pathofexile.com/forum/view-forum/news', table = 'forum_announcements', header = 'Forum Announcement'):
+async def scrape_forum(section = 'https://www.pathofexile.com/forum/view-forum/news', table = 'forum_announcements', header = 'Forum - Announcements'):
     loop = asyncio.get_event_loop() # could also use bot.loop or whatever it is
     future = loop.run_in_executor(None, requests.get, section)
     data = await future
@@ -629,6 +630,19 @@ async def scrape_forum(section = 'https://www.pathofexile.com/forum/view-forum/n
 
     new_threads = filter(lambda x: x[2] not in already_parsed,threads)
     for thread in new_threads:
+        embed_img = None
+        # try to get a header image, literally (these only appear in forum announcements)
+        try:
+            if table == 'forum_announcements':
+                loop = asyncio.get_event_loop()
+                future = loop.run_in_executor(None, requests.get, thread[1])
+                data = await future
+
+                if data.status_code == 200:
+                    etree = lxmlhtml.fromstring(data.text)
+                    embed_img = etree.xpath('//tr[contains(@class,"newsPost")]//img/@src')[0]
+        except:
+            pass
         r=bot.cursor.execute('SELECT 1 FROM %s WHERE threadnum=?'%table,(thread[2],))
         if r.fetchone():
             break
@@ -636,7 +650,7 @@ async def scrape_forum(section = 'https://www.pathofexile.com/forum/view-forum/n
             #announce.
             bot.cursor.execute('INSERT INTO %s (title,url,threadnum) VALUES (?,?,?)'%table,thread)
             bot.conn.commit()
-            announces.append(_create_forum_embed(thread[1],thread[0],header))
+            announces.append(_create_forum_embed(thread[1],thread[0],header,img=embed_img))
     return announces
 
 async def scrape_deals(deal_api = 'https://www.pathofexile.com/api/shop/microtransactions/specials?limit=9999'):
@@ -671,11 +685,15 @@ async def scrape_deals(deal_api = 'https://www.pathofexile.com/api/shop/microtra
         bot.conn.commit()
         return (_create_deal_embed(title,img_url),)
 
-def _create_forum_embed(url,title,name='Forum Announcement'):
+def _create_forum_embed(url,title,name='Forum Announcement',thumb_url='https://web.poecdn.com/image/favicon/ogimage.png?v=1',img=None):
     e = discord.Embed(url=url,
         title=title,
         type='rich')
     e.set_author(name=name,url=url.replace('view-thread','post-reply'))
+    if img:
+        e.set_image(url=img)
+    else:
+        e.set_thumbnail(url=thumb_url)
     return e
 
 def _create_deal_embed(title,img_url,name='Daily Deal'):

@@ -101,3 +101,7 @@ ENV/
 .mypy_cache/
 
 token
+*.sqlite
+*.sqlitedb
+*.txt
+/venv
