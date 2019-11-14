@@ -442,6 +442,19 @@ async def next(ctx):
     else:
         await bot.send_message(ctx.message.channel, 'No upcoming events.')
 
+@bot.command(pass_context=True)
+async def lab(ctx, *difficulty: str):
+    '''<difficulty> Displays map for current uber lab, or difficulty if specified.'''
+    print(difficulty)
+    if not len(difficulty) or not difficulty[0] in ('normal','cruel','merciless','uber','merc'):
+        # await bot.send_message(ctx.message.channel, 'usage: -lab <difficulty>')
+        diff = 'uber'
+    else:
+        diff = difficulty[0]
+    if diff == 'merc':
+        diff = 'merciless'
+    await bot.send_message(ctx.message.channel, 'https://www.poelab.com/wp-content/labfiles/{}_{}.jpg'.format(datetime.datetime.utcnow().strftime('%Y-%m-%d'), diff), code_block = False)
+
 def _create_currency_embed(data):
     price = data['chaosValue']
     chaos_to_spend = 20
