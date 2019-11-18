@@ -304,7 +304,7 @@ sub-commands:
 reminder list - list all reminders for yourself
 reminder delete <index> - delete specified reminder
 reminder timezone <tz> - set timezone for date reminders'''
-    helpmsg = 'usage:\n-reminder [<role/channel>] <date/timedelta> <message>'
+    helpmsg = 'usage:\n-reminder <datetime/timedelta> <message>'
     isprivate = ctx.message.channel.type == PRIVATE_CHANNEL
     fulltext = ' '.join(args)
     if not len(args):
@@ -370,6 +370,9 @@ reminder timezone <tz> - set timezone for date reminders'''
         # await bot.send_message(ctx.message.channel, 'channel, @{}'.format(validroles[0]),code_block=False)
     elif len(args)>2:
         date,msg = parse_reminder_time(fulltext)
+        if date.tzinfo:
+            await bot.send_message(ctx.message.channel, 'timezone argument not (currently) supported, set global timezone for this server with -reminder timezone <tz>')
+            return
         if not date:
             await bot.send_message(ctx.message.channel, helpmsg)
             return
