@@ -17,6 +17,8 @@ import io,shutil # for copying pins
 import json,hashlib # for daily deal
 from fractions import Fraction
 import math
+import dateparser
+from dateparser.search import search_dates
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
@@ -204,6 +206,25 @@ async def forum_announcements():
                 'this can be caused by things like maintenance'
         await asyncio.sleep(60)
 
+async def send_reminders():
+    await bot.wait_until_ready()
+    await bot.wait_until_login() # just in case .is_closed is true before login.
+    while not bot.is_closed:
+        r=bot.cursor.execute('''SELECT creator,role,channel,server,datetime,message FROM reminders WHERE datetime <= datetime('now')''')
+        for row in r.fetchall():
+            'announce and delete.'
+            try:
+                await bot.send_message(discord.Object(id=row[2]), '<@{}> {}'.format(row[0],row[5]),code_block=False)
+            except:
+                'channel missing or bot is blocked'
+            finally:
+                try:
+                    bot.cursor.execute('DELETE FROM reminders WHERE creator = ? and role = ? and channel = ? and server = ? and datetime = ? and message = ?', row)
+                    bot.conn.commit()
+                except:
+                    pass
+        await asyncio.sleep(5)
+
 @bot.event
 async def on_ready():
     print('Logged in as')
@@ -272,6 +293,95 @@ Number of pins to move OR set a channel for pins.'''
     else:
         await bot.send_message(ctx.message.channel, 'Invalid pin channel (must be a channel on this server + bot must have proper permissions)')
         return
+
+@bot.command(pass_context=True, aliases = ['remind','remindme'])
+async def reminder(ctx, *args : str):
+    '''<datetime/timedelta> <message>
+Set a reminder; for example:
+-reminder 3pm June 10 hello
+-reminder 3 days 10 hours world
+sub-commands:
+reminder list - list all reminders for yourself
+reminder delete <index> - delete specified reminder
+reminder timezone <tz> - set timezone for date reminders'''
+    helpmsg = 'usage:\n-reminder [<role/channel>] <date/timedelta> <message>'
+    isprivate = ctx.message.channel.type == PRIVATE_CHANNEL
+    fulltext = ' '.join(args)
+    if not len(args):
+        await bot.send_message(ctx.message.channel, helpmsg)
+        return
+    server_id = ctx.message.server and ctx.message.server.id or ctx.message.channel.id
+    subcmd = args[0]
+    r = bot.cursor.execute('SELECT timezone from timezones where server=?',(server_id,)).fetchone()
+    settings = {'TIMEZONE':(r and r[0]) or 'UTC', 'TO_TIMEZONE':'UTC'}
+    disp_settings = {'TO_TIMEZONE':(r and r[0]) or 'UTC', 'TIMEZONE':'UTC'}
+    def parse_reminder_time(txt):
+        dates = search_dates(txt)
+        if not dates:
+            return None,None
+        for date,_ in dates:
+            if txt.startswith(date):
+                msg = txt[len(date):].lstrip()
+                if not date.startswith('in'):
+                    date = 'in {}'.format(date)
+                return dateparser.parse(date, settings = settings),msg
+        return None,None
+    if subcmd in ('list','-l'):
+        r = bot.cursor.execute('SELECT message,datetime FROM reminders where creator = ? and server = ? ORDER by datetime ASC',(ctx.message.author.id,server_id))
+        res = r.fetchall()
+        if not res:
+            await bot.send_message(ctx.message.channel, 'You have 0 reminders.')
+            return
+        p = ''
+        for i,r in enumerate(res):
+            p+= '{}. "{}" on {}\n'.format(i,r[0],r[1])
+        await bot.send_message(ctx.message.channel, p)
+    elif subcmd in ('delete','del'):
+        if len(args)<2 or not re.match('^\d*$',args[1]):
+            await bot.send_message(ctx.message.channel, 'usage:\n-reminder timezone <timezone>')
+            return
+        
+        r = bot.cursor.execute('SELECT creator,role,channel,server,datetime,message FROM reminders where creator = ? and server = ? ORDER by datetime ASC',(ctx.message.author.id,server_id))
+        res = r.fetchall()
+        bot.cursor.execute('DELETE FROM reminders WHERE creator = ? and role = ? and channel = ? and server = ? and datetime = ? and message = ?', res[int(args[1])])
+        bot.conn.commit()
+        await bot.send_message(ctx.message.channel, 'Reminder deleted.')
+    elif subcmd in ('timezone','tz'):
+        if len(args)<2:
+            await bot.send_message(ctx.message.channel, 'usage:\n-reminder timezone <timezone>')
+            return
+        if not isprivate and not ctx.message.author.permissions_in(ctx.message.channel).administrator:
+            await bot.send_message(ctx.message.channel, 'You must be an administrator to set reminder timezone for this server.')
+            return
+        tz = args[1]
+        bot.cursor.execute('REPLACE INTO timezones(server,timezone) VALUES(?,?)',(server_id,tz))
+        bot.conn.commit()
+        await bot.send_message(ctx.message.channel, 'Server timezone set to "{}"'.format(tz))
+    # elif subcmd is role or channel, this isnt that useful, maybe implement later.
+    # elif re.match('^@&.*$',subcmd):
+        # if not ctx.message.author.permissions_in(ctx.message.channel).administrator:
+            # await bot.send_message(ctx.message.channel, 'You must be an administrator to set reminders for a role')
+            # return
+        # print([role.name for role in ctx.message.server.roles],subcmd[1:])
+        # validroles = [role for role in ctx.message.server.roles if role.name==subcmd[1:]]
+        # if not validroles:
+            # await bot.send_message(ctx.message.channel, 'Role not found. @MapleBot @everyone <@&645896432783589387>',code_block=False)
+            # return
+        # await bot.send_message(ctx.message.channel, 'channel, @{}'.format(validroles[0]),code_block=False)
+    elif len(args)>2:
+        date,msg = parse_reminder_time(fulltext)
+        if not date:
+            await bot.send_message(ctx.message.channel, helpmsg)
+            return
+        if date <= datetime.datetime.utcnow():
+            await bot.send_message(ctx.message.channel, 'Given date ({}) has already passed, try being more specific.'.format(date))
+            return
+        bot.cursor.execute('REPLACE INTO reminders(creator,server,channel,datetime,message) VALUES(?,?,?,?,?)',(ctx.message.author.id,server_id,ctx.message.channel.id,date,msg))
+        bot.conn.commit()
+        await bot.send_message(ctx.message.channel, 'reminder set for {}'.format(dateparser.parse(date.strftime("%m/%d/%Y, %H:%M:%S"),settings = disp_settings)))
+    else:
+        await bot.send_message(ctx.message.channel, helpmsg)
+    return
         
 async def announce_internals(ctx,msg,announce_id,announce_name,commandname):
     destination = ctx.message.channel
@@ -304,7 +414,7 @@ async def announce_internals(ctx,msg,announce_id,announce_name,commandname):
     else:
         await bot.send_message(destination, 'usage: -{} <on|off>'.format(commandname))
 
-@bot.command(pass_context=True,aliases=['setleague','pc','league','pricecheck'])
+@bot.command(pass_context=True,aliases=['setleague','league','pricecheck'])
 async def pcleague(ctx, *league : str):
     '''<league>
 Set league for pricing in this channel, options are: tmpStandard, tmpHardcore, eventStandard, eventHardcore, Standard, Hardcore.'''
@@ -354,7 +464,7 @@ class Alerts:
         await announce_internals(ctx,' '.join(toggle),'event','Event announcements','events')
 class Info:
     'Show info on in-game items. These commands have one letter aliases for quicker use (ex: -u)'
-    @commands.command(pass_context=True,aliases=['u'])
+    @commands.command(pass_context=True,aliases=['u','pc'])
     async def unique(self, ctx, *itemname: str):
         '''<item>
     Shows stats for an item. Partial names acceptable.'''
@@ -380,6 +490,18 @@ class Info:
         e = _create_unique_embed(data[0])
         await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
         
+    @commands.command(pass_context=True)
+    async def lab(self, ctx, *difficulty: str):
+        '''[<difficulty>]
+        Displays map for current uber lab, or difficulty if specified (one of uber,merciless,cruel,normal)'''
+        if not len(difficulty) or not difficulty[0] in ('normal','cruel','merciless','uber','merc'):
+            diff = 'uber'
+        else:
+            diff = difficulty[0]
+        if diff == 'merc':
+            diff = 'merciless'
+        await bot.send_message(ctx.message.channel, 'https://www.poelab.com/wp-content/labfiles/{}_{}.jpg'.format(datetime.datetime.utcnow().strftime('%Y-%m-%d'), diff), code_block = False)
+
     @commands.command(pass_context=True,aliases=['s'])
     async def skill(self, ctx, *skill_name: str):
         '''<skill>
@@ -442,16 +564,6 @@ async def next(ctx):
     else:
         await bot.send_message(ctx.message.channel, 'No upcoming events.')
 
-@bot.command(pass_context=True)
-async def lab(ctx, *difficulty: str):
-    '''Displays map for current uber lab, or difficulty if specified (one of uber,merciless,cruel,normal)'''
-    if not len(difficulty) or not difficulty[0] in ('normal','cruel','merciless','uber','merc'):
-        diff = 'uber'
-    else:
-        diff = difficulty[0]
-    if diff == 'merc':
-        diff = 'merciless'
-    await bot.send_message(ctx.message.channel, 'https://www.poelab.com/wp-content/labfiles/{}_{}.jpg'.format(datetime.datetime.utcnow().strftime('%Y-%m-%d'), diff), code_block = False)
 
 def _create_currency_embed(data):
     price = data['chaosValue']
@@ -745,13 +857,25 @@ if __name__ =='__main__':
     bot.cursor.execute('''CREATE TABLE IF NOT EXISTS pricecheck
              (channel int PRIMARY KEY,
              league text)''')
+    bot.cursor.execute('''CREATE TABLE IF NOT EXISTS reminders
+             (creator int,
+             role int DEFAULT 0,
+             channel int DEFAULT 0,
+             server int DEFAULT 0,
+             datetime real,
+             message text,
+             interval int DEFAULT 0,
+             PRIMARY KEY (creator,server,message,datetime,channel,role))''')
+    bot.cursor.execute('''CREATE TABLE IF NOT EXISTS timezones
+             (server int PRIMARY KEY,
+             timezone text DEFAULT "UTC")''')
     bot.conn.commit()
 
     bot.add_cog(Alerts())
     bot.add_cog(Info())
     with open('token','r') as f:
         # if any (background) task raises an exception, end this bot.
-        tasks = [bot.start(f.read()),bot.loop.create_task(cleanup_reactions()),bot.loop.create_task(forum_announcements())]
+        tasks = [bot.start(f.read()),bot.loop.create_task(cleanup_reactions()),bot.loop.create_task(forum_announcements()),bot.loop.create_task(send_reminders())]
         bot.loop.run_until_complete(asyncio.gather(*tasks))
 
 ##https://discordapp.com/oauth2/authorize?client_id=313788924151726082&scope=bot&permissions=0
