@@ -326,6 +326,7 @@ reminder timezone <tz> - set timezone for date reminders'''
                 if tentative < datetime.datetime.utcnow():
                     diff = datetime.datetime.utcnow()-tentative
                     return datetime.datetime.utcnow() + diff,msg
+                return tentative, msg
         return None,None
     if subcmd in ('list','-l'):
         r = bot.cursor.execute('SELECT message,datetime FROM reminders where creator = ? and server = ? ORDER by datetime ASC',(ctx.message.author.id,server_id))
