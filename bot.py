@@ -316,17 +316,14 @@ reminder timezone <tz> - set timezone for date reminders'''
     settings = {'TIMEZONE':(r and r[0]) or 'UTC', 'TO_TIMEZONE':'UTC', 'PREFER_DATES_FROM': 'future'}
     disp_settings = {'TO_TIMEZONE':(r and r[0]) or 'UTC', 'TIMEZONE':'UTC', 'PREFER_DATES_FROM': 'future'}
     def parse_reminder_time(txt):
-        dates = search_dates(txt)
-        if not dates:
-            return None,None
-        for date,_ in dates:
-            if txt.startswith(date):
-                msg = txt[len(date):].lstrip()
-                tentative = dateparser.parse(date, settings = settings)
-                if tentative < datetime.datetime.utcnow():
-                    diff = datetime.datetime.utcnow()-tentative
-                    return datetime.datetime.utcnow() + diff,msg
-                return tentative, msg
+        dates = search_dates(txt, settings = settings)
+        for datestr,dt in dates:
+            if txt.startswith(datestr):
+                msg = txt[len(datestr):].lstrip()
+                if dt < datetime.datetime.utcnow():
+                    diff = datetime.datetime.utcnow() - dt
+                    return datetime.datetime.utcnow() + diff, msg
+                return dt, msg
         return None,None
     if subcmd in ('list','-l'):
         r = bot.cursor.execute('SELECT message,datetime FROM reminders where creator = ? and server = ? ORDER by datetime ASC',(ctx.message.author.id,server_id))
