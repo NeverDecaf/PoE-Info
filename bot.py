@@ -313,8 +313,8 @@ reminder timezone <tz> - set timezone for date reminders'''
     server_id = ctx.message.server and ctx.message.server.id or ctx.message.channel.id
     subcmd = args[0]
     r = bot.cursor.execute('SELECT timezone from timezones where server=?',(server_id,)).fetchone()
-    settings = {'TIMEZONE':(r and r[0]) or 'UTC', 'TO_TIMEZONE':'UTC'}
-    disp_settings = {'TO_TIMEZONE':(r and r[0]) or 'UTC', 'TIMEZONE':'UTC'}
+    settings = {'TIMEZONE':(r and r[0]) or 'UTC', 'TO_TIMEZONE':'UTC', 'PREFER_DATES_FROM': 'future'}
+    disp_settings = {'TO_TIMEZONE':(r and r[0]) or 'UTC', 'TIMEZONE':'UTC', 'PREFER_DATES_FROM': 'future'}
     def parse_reminder_time(txt):
         dates = search_dates(txt)
         if not dates:
@@ -322,9 +322,10 @@ reminder timezone <tz> - set timezone for date reminders'''
         for date,_ in dates:
             if txt.startswith(date):
                 msg = txt[len(date):].lstrip()
-                if not date.startswith('in'):
-                    date = 'in {}'.format(date)
-                return dateparser.parse(date, settings = settings),msg
+                tentative = dateparser.parse(date, settings = settings)
+                if tentative > datetime.datetime.utcnow():
+                    return tentative, msg
+                return dateparser.parse('in {}'.format(date), settings = settings),msg
         return None,None
     if subcmd in ('list','-l'):
         r = bot.cursor.execute('SELECT message,datetime FROM reminders where creator = ? and server = ? ORDER by datetime ASC',(ctx.message.author.id,server_id))
@@ -338,7 +339,7 @@ reminder timezone <tz> - set timezone for date reminders'''
         await bot.send_message(ctx.message.channel, p)
     elif subcmd in ('delete','del'):
         if len(args)<2 or not re.match('^\d*$',args[1]):
-            await bot.send_message(ctx.message.channel, 'usage:\n-reminder timezone <timezone>')
+            await bot.send_message(ctx.message.channel, 'usage:\n-reminder del <index>')
             return
         
         r = bot.cursor.execute('SELECT creator,role,channel,server,datetime,message FROM reminders where creator = ? and server = ? ORDER by datetime ASC',(ctx.message.author.id,server_id))
@@ -368,13 +369,13 @@ reminder timezone <tz> - set timezone for date reminders'''
             # await bot.send_message(ctx.message.channel, 'Role not found. @MapleBot @everyone <@&645896432783589387>',code_block=False)
             # return
         # await bot.send_message(ctx.message.channel, 'channel, @{}'.format(validroles[0]),code_block=False)
-    elif len(args)>2:
+    elif len(args)>1:
         date,msg = parse_reminder_time(fulltext)
-        if date.tzinfo:
-            await bot.send_message(ctx.message.channel, 'timezone argument not (currently) supported, set global timezone for this server with -reminder timezone <tz>')
-            return
         if not date:
             await bot.send_message(ctx.message.channel, helpmsg)
+            return
+        if date.tzinfo:
+            await bot.send_message(ctx.message.channel, 'timezone argument not (currently) supported, set global timezone for this server with -reminder timezone <tz>')
             return
         if date <= datetime.datetime.utcnow():
             await bot.send_message(ctx.message.channel, 'Given date ({}) has already passed, try being more specific.'.format(date))
