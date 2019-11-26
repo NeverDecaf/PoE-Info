@@ -282,11 +282,18 @@ Number of pins to move OR set a channel for pins.'''
         for pin in list(reversed(pins))[:min(len(pins),int(count[0]))]:
             msg_content = '{} ({}): {}'.format(pin.author.nick or pin.author,pin.edited_timestamp.strftime("%m/%d/%y") if pin.edited_timestamp else pin.timestamp.strftime("%d/%m/%y"),pin.content)
             if pin.attachments:
-                buffer = io.BytesIO()
-                r = requests.get(pin.attachments[0]['url'], stream=True)
-                shutil.copyfileobj(r.raw, buffer)
-                buffer.seek(0)
-                await bot.send_file(pin_channel,buffer,filename=pin.attachments[0]['filename'],content=msg_content)
+                try:
+                    buffer = io.BytesIO()
+                    r = requests.get(pin.attachments[0]['url'], stream=True)
+                    shutil.copyfileobj(r.raw, buffer)
+                    buffer.seek(0)
+                    await bot.send_file(pin_channel,buffer,filename=pin.attachments[0]['filename'],content=msg_content)
+                except discord.errors.HTTPException as e:
+                    if e.response.status == 413:
+                        # 413 = request entity too large
+                        await bot.send_message(pin_channel, '{}\n{}'.format(msg_content,pin.attachments[0]['url']),code_block=False)
+                    else:
+                        raise
             else:
                 await bot.send_message(pin_channel, msg_content,code_block=False)
             await bot.unpin_message(pin) # This isnt working, or pins_from isnt refreshsed
