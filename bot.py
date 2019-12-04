@@ -312,6 +312,7 @@ reminder list - list all reminders for yourself
 reminder delete <index> - delete specified reminder
 reminder timezone <tz> - set timezone for date reminders'''
     helpmsg = 'usage:\n-reminder <datetime/timedelta> <message>'
+    time_display_format = "%Y-%m-%d %H:%M:%S"
     isprivate = ctx.message.channel.type == PRIVATE_CHANNEL
     fulltext = ' '.join(args)
     if not len(args):
@@ -340,7 +341,7 @@ reminder timezone <tz> - set timezone for date reminders'''
             return
         p = ''
         for i,r in enumerate(res):
-            p+= '{}. "{}" on {}\n'.format(i,r[0],dateparser.parse(r[1],settings = disp_settings))
+            p+= '{}. "{}" on {}\n'.format(i,r[0],dateparser.parse(r[1],settings = disp_settings).strftime(time_display_format))
         await bot.send_message(ctx.message.channel, p)
     elif subcmd in ('delete','del'):
         if len(args)<2 or not re.match('^\d*$',args[1]):
@@ -387,7 +388,7 @@ reminder timezone <tz> - set timezone for date reminders'''
             return
         bot.cursor.execute('REPLACE INTO reminders(creator,server,channel,datetime,message) VALUES(?,?,?,?,?)',(ctx.message.author.id,server_id,ctx.message.channel.id,date,msg))
         bot.conn.commit()
-        await bot.send_message(ctx.message.channel, 'reminder set for {}'.format(dateparser.parse(date.strftime("%m/%d/%Y, %H:%M:%S"),settings = disp_settings)))
+        await bot.send_message(ctx.message.channel, 'reminder set for {}'.format(dateparser.parse(date.strftime("%Y-%m-%d %H:%M:%S.%f"),settings = disp_settings).strftime(time_display_format)))
     else:
         await bot.send_message(ctx.message.channel, helpmsg)
     return
