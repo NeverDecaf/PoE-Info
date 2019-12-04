@@ -340,7 +340,7 @@ reminder timezone <tz> - set timezone for date reminders'''
             return
         p = ''
         for i,r in enumerate(res):
-            p+= '{}. "{}" on {}\n'.format(i,r[0],r[1])
+            p+= '{}. "{}" on {}\n'.format(i,r[0],dateparser.parse(r[1],settings = disp_settings))
         await bot.send_message(ctx.message.channel, p)
     elif subcmd in ('delete','del'):
         if len(args)<2 or not re.match('^\d*$',args[1]):
