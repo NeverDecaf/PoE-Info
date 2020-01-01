@@ -689,16 +689,18 @@ def _create_gem_embed(data):
     if data['vaal_souls_requirement']:
         stats_string+='Souls Per Use: {}\n'.format(data['vaal_souls_requirement'])
     if data['vaal_stored_uses']:
-        stats_string+='Can store {} use(s)\n'.format(data['vaal_stored_uses'])
+        stats_string+='Can Store {} Use(s)\n'.format(data['vaal_stored_uses'])
+    if data['stored_uses'] and int(data['stored_uses'])>1:
+        stats_string+='Can Store {} Use(s)\n'.format(data['stored_uses'])
     if data['cooldown']:
         stats_string+='Cooldown Time: {}s\n'.format(data['cooldown'])    
-    if data['cast_time']:
+    if data['cast_time'] and 'Attack' not in data['tags']:
         stats_string+='Cast Time: {}s\n'.format(data['cast_time'])
     if data['crit_chance']:
         stats_string+='Critical Strike Chance: {}%\n'.format(data['crit_chance'])
     if data['proj_speed']:
         stats_string+='Projectile Speed: {}\n'.format(data['proj_speed'])
-    if data['attack_speed_multiplier']:
+    if data['attack_speed_multiplier'] and int(data['attack_speed_multiplier'])!=100:
         stats_string+='Attack Speed: {}% of base\n'.format(data['attack_speed_multiplier'])
     if data['damage_effectiveness']:
         if data['damage_effectiveness_max']:
