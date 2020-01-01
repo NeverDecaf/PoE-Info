@@ -700,8 +700,11 @@ def _create_gem_embed(data):
         stats_string+='Projectile Speed: {}\n'.format(data['proj_speed'])
     if data['attack_speed_multiplier']:
         stats_string+='Attack Speed: {}% of base\n'.format(data['attack_speed_multiplier'])
-    if data['damage_effectiveness_max'] and data['damage_effectiveness']:
-        stats_string+='Damage Effectiveness: ({}-{})%\n'.format(data['damage_effectiveness'],data['damage_effectiveness_max'])
+    if data['damage_effectiveness']:
+        if data['damage_effectiveness_max']:
+            stats_string+='Damage Effectiveness: ({}-{})%\n'.format(data['damage_effectiveness'],data['damage_effectiveness_max'])
+        elif int(data['damage_effectiveness'])!=100:
+            stats_string+='Damage Effectiveness: {}%\n'.format(data['damage_effectiveness'])
     if data['level_requirement']:
         stats_string+='Requires Level: ({}-{})'.format(data['level_requirement'],data['level_requirement_max'])
         if data['str_requirement']:
