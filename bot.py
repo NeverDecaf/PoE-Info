@@ -280,7 +280,7 @@ Number of pins to move OR set a channel for pins.'''
     if pin_channel and perm_check(ctx.message.channel,pin_channel):
         pins = await bot.pins_from(ctx.message.channel)
         for pin in list(reversed(pins))[:min(len(pins),int(count[0]))]:
-            msg_content = '{} ({}): {}'.format(pin.author.nick or pin.author,pin.edited_timestamp.strftime("%m/%d/%y") if pin.edited_timestamp else pin.timestamp.strftime("%d/%m/%y"),pin.content)
+            msg_content = '{} ({}): {}'.format(pin.author.nick if (hasattr(pin.author,'nick') and pin.author.nick) else pin.author.name,pin.edited_timestamp.strftime("%m/%d/%y") if pin.edited_timestamp else pin.timestamp.strftime("%d/%m/%y"),pin.content)
             if pin.attachments:
                 try:
                     buffer = io.BytesIO()
