@@ -372,7 +372,7 @@ reminder timezone <tz> - set timezone for date reminders'''
         # print([role.name for role in ctx.message.server.roles],subcmd[1:])
         # validroles = [role for role in ctx.message.server.roles if role.name==subcmd[1:]]
         # if not validroles:
-            # await bot.send_message(ctx.message.channel, 'Role not found. @MapleBot @everyone <@&645896432783589387>',code_block=False)
+            # await bot.send_message(ctx.message.channel, 'Role not found.',code_block=False)
             # return
         # await bot.send_message(ctx.message.channel, 'channel, @{}'.format(validroles[0]),code_block=False)
     elif len(args)>1:

@@ -376,8 +376,8 @@ def get_ninja_prices(league='tmpStandard'):
 def get_ninja_rates(league='tmpStandard'):
         '''use poe.ninja api to get currency prices'''
         data=[]
-        api = 'https://poe.ninja/api/data/itemoverview?league={}&type=Currency'
-        r = requests.get(api.format(league))
+        api = 'https://poe.ninja/api/data/{}overview?league={}&type={}'
+        r = requests.get(api.format('currency',league,'Currency'))
         r.encoding = 'utf-8'
         try:
                 rj = r.json()
