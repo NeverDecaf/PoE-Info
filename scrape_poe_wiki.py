@@ -414,7 +414,7 @@ def get_ninja_rates(league='tmpStandard'):
                     continue
             for x in rj['lines']:
                     data.append({'name':x['name'], 'chaosValue':x['chaosValue']})
-                    data[-1]['id'],data[-1]['icon'] = x['id'],x['icon']
+                    data[-1]['id'],data[-1]['icon'] = -x['id'],x['icon']
                     data[-1]['league'] = league
         return data
 if __name__ == '__main__':
