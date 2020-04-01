@@ -375,19 +375,47 @@ def get_ninja_prices(league='tmpStandard'):
         return data
 def get_ninja_rates(league='tmpStandard'):
         '''use poe.ninja api to get currency prices'''
+        itemtypes = ['DivinationCard','Oil','Scarab','Fossil','Resonator','Essence','Prophecy']
+        currencytypes = ['Currency','Fragment']
+        '''
+        omitted categories:
+        Watchstones
+        Incubators
+        Base Types
+        Helmet Enchants
+        (Unique) Maps
+        Beasts
+        Vials
+        '''
         data=[]
         api = 'https://poe.ninja/api/data/{}overview?league={}&type={}'
-        r = requests.get(api.format('currency',league,'Currency'))
-        r.encoding = 'utf-8'
-        try:
-                rj = r.json()
-        except JSONDecodeError:
-                return None
-        id_map = {}
-        for x in rj['currencyDetails']:
-                id_map[x['name']] = (x['id'],x['icon'])
-        for x in rj['lines']:
-                data.append({'name':x['currencyTypeName'], 'chaosValue':x['chaosEquivalent']})
-                data[-1]['id'],data[-1]['icon'] = id_map[x['currencyTypeName']]
-                data[-1]['league'] = league
+        for type in currencytypes:
+            r = requests.get(api.format('currency',league,type))
+            r.encoding = 'utf-8'
+            try:
+                    rj = r.json()
+            except JSONDecodeError:
+                    print("Error fetching currency data for:",type,'in',league)
+                    continue
+            id_map = {}
+            for x in rj['currencyDetails']:
+                    id_map[x['name']] = (x['id'],x['icon'])
+            for x in rj['lines']:
+                    data.append({'name':x['currencyTypeName'], 'chaosValue':x['chaosEquivalent']})
+                    data[-1]['id'],data[-1]['icon'] = id_map[x['currencyTypeName']]
+                    data[-1]['league'] = league
+        for type in itemtypes:
+            r = requests.get(api.format('item',league,type))
+            r.encoding = 'utf-8'
+            try:
+                    rj = r.json()
+            except JSONDecodeError:
+                    print("Error fetching currency data for:",type,'in',league)
+                    continue
+            for x in rj['lines']:
+                    data.append({'name':x['name'], 'chaosValue':x['chaosValue']})
+                    data[-1]['id'],data[-1]['icon'] = x['id'],x['icon']
+                    data[-1]['league'] = league
         return data
+if __name__ == '__main__':
+    print(get_ninja_rates())
