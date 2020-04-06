@@ -22,7 +22,7 @@ from dateparser.search import search_dates
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
-MESSAGE_EDITABLE_TIMEOUT = 60*10 # seconds, max of 1 day.
+MESSAGE_EDITABLE_TIMEOUT = 60*60*24 # seconds, max of 1 day.
 PRIVATE_CHANNEL = discord.ChannelType.private
 SEARCH_REACTION_LIMIT = 9 # max digit emojis to show.
 DIGIT_EMOJI = ['\U00000031\U000020E3',
@@ -574,7 +574,9 @@ async def next(ctx):
     else:
         await bot.send_message(ctx.message.channel, 'No upcoming events.')
 
-
+def _strip_html_tags(text):
+    return re.sub(r'<[^>]+>','',re.sub(r'<(br|tr|hr)[^>]+>','\n',text))
+    
 def _create_currency_embed(data):
     price = data['chaosValue']
     chaos_to_spend = 20
@@ -582,7 +584,7 @@ def _create_currency_embed(data):
     frac = Fraction(data['chaosValue']).limit_denominator(int(limit))
     stats_string = 'Est. Price: **{}**c\napprox. **{}** : **{}**c'.format(price,frac.denominator,frac.numerator)
     e = discord.Embed(url='https://pathofexile.gamepedia.com/{}'.format(data['name'].replace(' ','_')),
-        description=stats_string,
+        description=_strip_html_tags(stats_string),
         title=data['name'].strip(),
         type='rich',color=0x638000)
     if 'icon' in data.keys() and data['icon']:
@@ -634,13 +636,13 @@ def _create_unique_embed(data):
     
     stats_string=bold_nums.sub(r'**\1**', stats_string).replace('****','')
     e = discord.Embed(url='https://pathofexile.gamepedia.com/{}'.format(data['name'].replace(' ','_')),
-        description=stats_string,
+        description=_strip_html_tags(stats_string),
         title='\n'.join((data['name'].strip(),data['baseitem'].strip())),
         type='rich',color=0xaf6025)
     if 'icon' in data.keys() and data['icon']:
         e.set_thumbnail(url=data['icon'].replace(' ','%20'))
     if data['impl'] or data['expl']: #this is only for tabula
-        e.add_field(name=bold_nums.sub(r'**\1**', str(data['impl'])).replace('****','') if data['impl'] else '--',value=bold_nums.sub(r'**\1**', str(data['expl'])).replace('****','') if data['expl'] else '--',inline=False)
+        e.add_field(name=_strip_html_tags(bold_nums.sub(r'**\1**', str(data['impl'])) if data['impl'] else '--').replace('****',''),value=_strip_html_tags(bold_nums.sub(r'**\1**', str(data['expl'])) if data['expl'] else '--').replace('****',''),inline=False)
     if data['physdps'] or data['eledps']:
         s=''
         if data['physdps']:
@@ -737,7 +739,7 @@ def _create_gem_embed(data):
     e = discord.Embed(url='https://pathofexile.gamepedia.com/{}'.format(data['name'].replace(' ','_')),
         title=data['name'],
         type='rich',color=gemcolor)
-    e.add_field(name=data['tags'],value=stats_string,inline=False)
+    e.add_field(name=data['tags'],value=_strip_html_tags(stats_string),inline=False)
 
     if 'icon' in data.keys() and data['icon']:
         e.set_thumbnail(url=data['icon'].replace(' ','%20'))
