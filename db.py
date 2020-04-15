@@ -65,8 +65,10 @@ class PoeDB:
         res=self.cursor.execute(query,(league,searchname.lower(),))
         return res.fetchall()
     
-    def get_currency(self,searchname,league,limit = 9):
+    def get_currency(self,searchname,league,limit = 9,exact = False):
         query = '''SELECT * FROM ninja_currency_data WHERE ninja_currency_data.league=? COLLATE NOCASE AND ninja_currency_data.name COLLATE NOCASE LIKE "%"||?||"%" LIMIT ?'''
+        if exact:
+            query = '''SELECT * FROM ninja_currency_data WHERE ninja_currency_data.league=? COLLATE NOCASE AND ninja_currency_data.name COLLATE NOCASE = ? COLLATE NOCASE LIMIT ?'''
         res=self.cursor.execute(query,(league,searchname.lower(),limit))
         return res.fetchall()
     

@@ -551,13 +551,14 @@ class Info:
         if not data:
             await bot.send_failure_message(ctx.message.channel)
             return
+        exaltValue = bot.db.get_currency('Exalted Orb',league, exact=True)[0]['chaosValue']
         if len(data)>1:
             #send choices
             sent_msg= await bot.send_message(ctx.message.channel, 'Multiple Results:\n'+'\n'.join(['%i. %s'%(i+1,datum['name']) for i,datum in enumerate(data)]))
             for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
                 await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, data[i], _create_currency_embed)#, _search_result, data[i][3])
             return
-        e = _create_currency_embed(data[0])
+        e = _create_currency_embed(data[0],exaltValue)
         await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
         
 async def _search_result(msg, author, data, _func):
@@ -577,12 +578,15 @@ async def next(ctx):
 def _strip_html_tags(text):
     return re.sub(r'<[^>]+>','',re.sub(r'<(br|tr|hr)[^>]+>','\n',text))
     
-def _create_currency_embed(data):
+def _create_currency_embed(data, exaltValue):
     price = data['chaosValue']
     chaos_to_spend = 20
     limit = math.ceil(chaos_to_spend/price)
-    frac = Fraction(data['chaosValue']).limit_denominator(int(limit))
-    stats_string = 'Est. Price: **{}**c\napprox. **{}** : **{}**c'.format(price,frac.denominator,frac.numerator)
+    if data['chaosValue'] > exaltValue * 2:
+        stats_string = 'Est. Price: **{}**c\napprox. **{:.1f}**ex'.format(price, price/exaltValue)
+    else:
+        frac = Fraction(data['chaosValue']).limit_denominator(int(limit))
+        stats_string = 'Est. Price: **{}**c\napprox. **{}** : **{}**c'.format(price,frac.denominator,frac.numerator)
     e = discord.Embed(url='https://pathofexile.gamepedia.com/{}'.format(data['name'].replace(' ','_')),
         description=_strip_html_tags(stats_string),
         title=data['name'].strip(),
