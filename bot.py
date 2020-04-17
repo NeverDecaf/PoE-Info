@@ -551,14 +551,13 @@ class Info:
         if not data:
             await bot.send_failure_message(ctx.message.channel)
             return
-        exaltValue = bot.db.get_currency('Exalted Orb',league, exact=True)[0]['chaosValue']
         if len(data)>1:
             #send choices
             sent_msg= await bot.send_message(ctx.message.channel, 'Multiple Results:\n'+'\n'.join(['%i. %s'%(i+1,datum['name']) for i,datum in enumerate(data)]))
             for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
                 await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, data[i], _create_currency_embed)#, _search_result, data[i][3])
             return
-        e = _create_currency_embed(data[0],exaltValue)
+        e = _create_currency_embed(data[0])
         await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
         
 async def _search_result(msg, author, data, _func):
@@ -578,8 +577,9 @@ async def next(ctx):
 def _strip_html_tags(text):
     return re.sub(r'<[^>]+>','',re.sub(r'<(br|tr|hr)[^>]+>','\n',text))
     
-def _create_currency_embed(data, exaltValue):
+def _create_currency_embed(data):
     price = data['chaosValue']
+    exaltValue = bot.db.get_currency('Exalted Orb',data['league'], exact=True)[0]['chaosValue']
     chaos_to_spend = 20
     limit = math.ceil(chaos_to_spend/price)
     if data['chaosValue'] > exaltValue * 2:
