@@ -891,7 +891,8 @@ if __name__ =='__main__':
              (server int PRIMARY KEY,
              timezone text DEFAULT "UTC")''')
     bot.conn.commit()
-
+    import cogs
+    cogs.setup_all_cogs(bot)
     bot.add_cog(Alerts())
     bot.add_cog(Info())
     with open('token','r') as f:
