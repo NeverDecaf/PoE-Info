@@ -575,7 +575,7 @@ async def next(ctx):
         await bot.send_message(ctx.message.channel, 'No upcoming events.')
 
 def _strip_html_tags(text):
-    return re.sub(r'<[^>]+>','',re.sub(r'<(br|tr|hr)[^>]+>','\n',text))
+    return re.sub(r'<(?!One to)[^>]+>','',re.sub(r'<(br|tr|hr)[^>]+>','\n',re.sub(r' \| ','\n',text)),flags=re.I)
     
 def _create_currency_embed(data):
     price = data['chaosValue']
@@ -637,7 +637,6 @@ def _create_unique_embed(data):
         stats_string+='Requires {}'.format(', '.join(reqs))
     stats_string+='{}'.format(if_not_zero(data['jewellimit'],'Limited To:'))
     stats_string+='{}'.format(data['jewelradius'])
-    
     stats_string=bold_nums.sub(r'**\1**', stats_string).replace('****','')
     e = discord.Embed(url='https://pathofexile.gamepedia.com/{}'.format(data['name'].replace(' ','_')),
         description=_strip_html_tags(stats_string),
@@ -646,7 +645,7 @@ def _create_unique_embed(data):
     if 'icon' in data.keys() and data['icon']:
         e.set_thumbnail(url=data['icon'].replace(' ','%20'))
     if data['impl'] or data['expl']: #this is only for tabula
-        e.add_field(name=_strip_html_tags(bold_nums.sub(r'**\1**', str(data['impl'])) if data['impl'] else '--').replace('****',''),value=_strip_html_tags(bold_nums.sub(r'**\1**', str(data['expl'])) if data['expl'] else '--').replace('****',''),inline=False)
+        e.add_field(name=(_strip_html_tags(bold_nums.sub(r'**\1**', str(data['impl']))) or '--').replace('****',''),value=(_strip_html_tags(bold_nums.sub(r'**\1**', str(data['expl']))) or '--').replace('****',''),inline=False)
     if data['physdps'] or data['eledps']:
         s=''
         if data['physdps']:
