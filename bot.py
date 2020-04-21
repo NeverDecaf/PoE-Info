@@ -19,6 +19,7 @@ from fractions import Fraction
 import math
 import dateparser
 from dateparser.search import search_dates
+from urllib.parse import quote as urlquote
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
@@ -643,7 +644,9 @@ def _create_unique_embed(data):
         title='\n'.join((data['name'].strip(),data['baseitem'].strip())),
         type='rich',color=0xaf6025)
     if 'icon' in data.keys() and data['icon']:
-        e.set_thumbnail(url=data['icon'].replace(' ','%20'))
+        e.set_thumbnail(url=data['icon'])
+    elif 'image_url' in data.keys() and data['image_url']:
+        e.set_thumbnail(url='https://pathofexile.gamepedia.com/Special:Redirect/file/{}'.format(urlquote(data['image_url'])))
     if data['impl'] or data['expl']: #this is only for tabula
         e.add_field(name=(_strip_html_tags(bold_nums.sub(r'**\1**', str(data['impl']))) or '--').replace('****',''),value=(_strip_html_tags(bold_nums.sub(r'**\1**', str(data['expl']))) or '--').replace('****',''),inline=False)
     if data['physdps'] or data['eledps']:
