@@ -10,7 +10,7 @@ import urllib.parse as urlparse
 import html
 import time
 from json.decoder import JSONDecodeError
-
+import xml.etree.ElementTree as xt
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
@@ -417,5 +417,23 @@ def get_ninja_rates(league='tmpStandard'):
                     data[-1]['id'],data[-1]['icon'] = -x['id'],x['icon']
                     data[-1]['league'] = league
         return data
+def get_lab_urls(date):
+    ''' returns all 4 lab urls from poelab.com 
+        will return None for each if date on poelab doesnt match provided date (has not been updated yet)
+        date is format: %Y-%m-%d'''
+    labpages = []
+    ret = []
+    with requests.get('https://www.poelab.com/') as r:
+        for lab in re.findall('su-clearfix[^>]*">(.*?)<\/div>',r.text,re.I|re.M|re.S):
+            labpages.append(re.findall('href="([^"]*)',lab)[0])
+    for url in reversed(labpages):
+        with requests.get(url) as r:
+            t = re.findall('"notesImg"[^>]*?src="([^"]*)',r.text,re.S)[0]
+            if date not in t:
+                ret.append(None)
+            else:
+                ret.append(t)
+    return ret
 if __name__ == '__main__':
     print(get_ninja_rates())
+    

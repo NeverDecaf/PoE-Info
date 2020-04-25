@@ -20,6 +20,7 @@ import math
 import dateparser
 from dateparser.search import search_dates
 from urllib.parse import quote as urlquote
+from scrape_poe_wiki import get_lab_urls
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
@@ -511,8 +512,18 @@ class Info:
             diff = difficulty[0]
         if diff == 'merc':
             diff = 'merciless'
-        await bot.send_message(ctx.message.channel, 'https://www.poelab.com/wp-content/labfiles/{}_{}.jpg'.format(datetime.datetime.utcnow().strftime('%Y-%m-%d'), diff), code_block = False)
-
+        today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
+        r=bot.cursor.execute('select img_url from daily_labs where diff=? and date=?',(diff,today))
+        data = r.fetchone()
+        if not data:
+            _cache_labs()
+            r=bot.cursor.execute('select img_url from daily_labs where diff=? and date=?',(diff,today))
+            data = r.fetchone()
+        if not data:
+            return await bot.send_failure_message(ctx.message.channel)
+        #'https://www.poelab.com/wp-content/labfiles/{}_{}.jpg'.format(datetime.datetime.utcnow().strftime('%Y-%m-%d'), diff)
+        await bot.send_message(ctx.message.channel, data[0], code_block = False)
+            
     @commands.command(pass_context=True,aliases=['s'])
     async def skill(self, ctx, *skill_name: str):
         '''<skill>
@@ -560,7 +571,13 @@ class Info:
             return
         e = _create_currency_embed(data[0])
         await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
-        
+def _cache_labs():
+    today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
+    for lab,url in zip(('normal','cruel','merciless','uber'),get_lab_urls(today)):
+        if url:
+            bot.cursor.execute('REPLACE INTO daily_labs (date,diff,img_url) VALUES (?,?,?)',(today,lab,url))
+    bot.cursor.execute('DELETE FROM daily_labs WHERE date <> ?',(today,))
+    bot.conn.commit()
 async def _search_result(msg, author, data, _func):
     e = _func(data)
     await bot.send_deletable_message(author, msg.channel, embed=e)
@@ -870,6 +887,11 @@ if __name__ =='__main__':
              (title text,
              img_url text,
              hash text PRIMARY KEY)''')
+    bot.cursor.execute('''CREATE TABLE IF NOT EXISTS daily_labs
+             (date text,
+             diff text,
+             img_url text,
+             PRIMARY KEY (date,diff))''')
     try:
         bot.cursor.execute('''ALTER TABLE daily_deals ADD COLUMN end_date real''')
     except sqlite3.OperationalError:
