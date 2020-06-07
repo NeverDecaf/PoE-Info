@@ -24,6 +24,7 @@ from scrape_poe_wiki import get_lab_urls
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
+DISCORD_PIN_LIMIT = 50
 MESSAGE_EDITABLE_TIMEOUT = 60*60*24 # seconds, max of 1 day.
 PRIVATE_CHANNEL = discord.ChannelType.private
 SEARCH_REACTION_LIMIT = 9 # max digit emojis to show.
@@ -156,6 +157,17 @@ async def on_message_edit(before,after):
             await bot.edited_cleanup(after) # this can error due to race condition
         except:
             pass
+    elif not before.pinned and after.pinned:
+        # if pin limit reached, move 1 pin if pin channel set
+        pins = await bot.pins_from(after.channel)
+        if len(pins) >= DISCORD_PIN_LIMIT:
+            r=bot.cursor.execute('SELECT dest FROM pins WHERE source=?',(after.channel.id,))
+            dest = r.fetchone()
+            if dest:
+                pin_channel=bot.get_channel(str(dest[0]))
+                if pin_channel and _pin_perm_check(after.server, after.channel, pin_channel):
+                    await _move_pins(pins[-1:], pin_channel)
+
 async def cleanup_reactions():
     await bot.wait_until_ready()
     await bot.wait_until_login() # just in case .is_closed is true before login.
@@ -240,11 +252,6 @@ async def pin(ctx, *count : str):
     '''<count>|<set>
 Number of pins to move OR set a channel for pins.'''
 ##    for chan in ctx.message.server.channels:
-    def perm_check(src,dst):
-        src_perms=src.permissions_for(ctx.message.server.me)
-        dest_perms=dst.permissions_for(ctx.message.server.me)
-        return dest_perms.send_messages and dest_perms.attach_files and dest_perms.embed_links\
-               and src_perms.read_message_history and src_perms.manage_messages and src_perms.read_messages
     if not ctx.message.author.permissions_in(ctx.message.channel).administrator:
         await bot.send_message(ctx.message.channel, 'You must be an administrator to use this command.')
         return
@@ -256,7 +263,7 @@ Number of pins to move OR set a channel for pins.'''
         try:
             just_id = count[1][2:-1]
             ch = bot.get_channel(just_id)
-            if ch and perm_check(ctx.message.channel,ch):
+            if ch and _pin_perm_check(ctx.message.server,ctx.message.channel,ch):
                 bot.cursor.execute('REPLACE INTO pins(source,dest) VALUES(?,?)',(ctx.message.channel.id,just_id))
                 bot.conn.commit()
                 await bot.send_message(ctx.message.channel, 'Set pin destination for {} to {}'.format(ctx.message.channel.mention,ch.mention),code_block=False)
@@ -281,30 +288,36 @@ Number of pins to move OR set a channel for pins.'''
         return
     pin_channel=bot.get_channel(str(dest[0]))
     # do a extra permissions check for safety:
-    if pin_channel and perm_check(ctx.message.channel,pin_channel):
+    if pin_channel and _pin_perm_check(ctx.message.server,ctx.message.channel,pin_channel):
         pins = await bot.pins_from(ctx.message.channel)
-        for pin in list(reversed(pins))[:min(len(pins),int(count[0]))]:
-            msg_content = '{} ({}): {}'.format(pin.author.nick if (hasattr(pin.author,'nick') and pin.author.nick) else pin.author.name,pin.edited_timestamp.strftime("%m/%d/%y") if pin.edited_timestamp else pin.timestamp.strftime("%d/%m/%y"),pin.content)
-            if pin.attachments:
-                try:
-                    buffer = io.BytesIO()
-                    r = requests.get(pin.attachments[0]['url'], stream=True)
-                    shutil.copyfileobj(r.raw, buffer)
-                    buffer.seek(0)
-                    await bot.send_file(pin_channel,buffer,filename=pin.attachments[0]['filename'],content=msg_content)
-                except discord.errors.HTTPException as e:
-                    if e.response.status == 413:
-                        # 413 = request entity too large
-                        await bot.send_message(pin_channel, '{}\n{}'.format(msg_content,pin.attachments[0]['url']),code_block=False)
-                    else:
-                        raise
-            else:
-                await bot.send_message(pin_channel, msg_content,code_block=False)
-            await bot.unpin_message(pin) # This isnt working, or pins_from isnt refreshsed
+        await _move_pins(list(reversed(pins))[:min(len(pins),int(count[0]))],pin_channel)
     else:
         await bot.send_message(ctx.message.channel, 'Invalid pin channel (must be a channel on this server + bot must have proper permissions)')
         return
-
+def _pin_perm_check(server,src,dst):
+    src_perms=src.permissions_for(server.me)
+    dest_perms=dst.permissions_for(server.me)
+    return dest_perms.send_messages and dest_perms.attach_files and dest_perms.embed_links\
+           and src_perms.read_message_history and src_perms.manage_messages and src_perms.read_messages
+async def _move_pins(pinlist,pin_channel):
+    for pin in pinlist:
+        msg_content = '{} ({}): {}\n{}'.format(pin.author.nick if (hasattr(pin.author,'nick') and pin.author.nick) else pin.author.name,pin.edited_timestamp.strftime("%m/%d/%y") if pin.edited_timestamp else pin.timestamp.strftime("%d/%m/%y"),pin.content,'[<https://discord.com/channels/{}/{}/{}>]'.format(pin.server.id,pin.channel.id,pin.id))
+        if pin.attachments:
+            try:
+                buffer = io.BytesIO()
+                r = requests.get(pin.attachments[0]['url'], stream=True)
+                shutil.copyfileobj(r.raw, buffer)
+                buffer.seek(0)
+                await bot.send_file(pin_channel,buffer,filename=pin.attachments[0]['filename'],content=msg_content)
+            except discord.errors.HTTPException as e:
+                if e.response.status == 413:
+                    # 413 = request entity too large
+                    await bot.send_message(pin_channel, '{}\n{}'.format(msg_content,pin.attachments[0]['url']),code_block=False)
+                else:
+                    raise
+        else:
+            await bot.send_message(pin_channel, msg_content,code_block=False)
+        await bot.unpin_message(pin) # This isnt working, or pins_from isnt refreshsed
 @bot.command(pass_context=True, aliases = ['remind','remindme'])
 async def reminder(ctx, *args : str):
     '''<datetime/timedelta> <message>
