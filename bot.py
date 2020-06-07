@@ -245,11 +245,13 @@ Number of pins to move OR set a channel for pins.'''
         dest_perms=dst.permissions_for(ctx.message.server.me)
         return dest_perms.send_messages and dest_perms.attach_files and dest_perms.embed_links\
                and src_perms.read_message_history and src_perms.manage_messages and src_perms.read_messages
-
+    if not ctx.message.author.permissions_in(ctx.message.channel).administrator:
+        await bot.send_message(ctx.message.channel, 'You must be an administrator to use this command.')
+        return
     if len(count)>1 and count[0] == 'set':
         # set pin channel
         if not ctx.message.author.permissions_in(ctx.message.channel).administrator:
-            await bot.send_message(destination, 'You must be an administrator to set pin channel.')
+            await bot.send_message(ctx.message.channel, 'You must be an administrator to set pin channel.')
             return
         try:
             just_id = count[1][2:-1]
