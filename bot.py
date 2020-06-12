@@ -301,22 +301,8 @@ def _pin_perm_check(server,src,dst):
            and src_perms.read_message_history and src_perms.manage_messages and src_perms.read_messages
 async def _move_pins(pinlist,pin_channel):
     for pin in pinlist:
-        msg_content = '{} ({}): {}\n{}'.format(pin.author.nick if (hasattr(pin.author,'nick') and pin.author.nick) else pin.author.name,pin.edited_timestamp.strftime("%m/%d/%y") if pin.edited_timestamp else pin.timestamp.strftime("%d/%m/%y"),pin.content,'[<https://discord.com/channels/{}/{}/{}>]'.format(pin.server.id,pin.channel.id,pin.id))
-        if pin.attachments:
-            try:
-                buffer = io.BytesIO()
-                r = requests.get(pin.attachments[0]['url'], stream=True)
-                shutil.copyfileobj(r.raw, buffer)
-                buffer.seek(0)
-                await bot.send_file(pin_channel,buffer,filename=pin.attachments[0]['filename'],content=msg_content)
-            except discord.errors.HTTPException as e:
-                if e.response.status == 413:
-                    # 413 = request entity too large
-                    await bot.send_message(pin_channel, '{}\n{}'.format(msg_content,pin.attachments[0]['url']),code_block=False)
-                else:
-                    raise
-        else:
-            await bot.send_message(pin_channel, msg_content,code_block=False)
+        e = _create_pin_embed(pin)
+        await bot.send_message(pin_channel, code_block=False, embed = e)
         await bot.unpin_message(pin) # This isnt working, or pins_from isnt refreshsed
 @bot.command(pass_context=True, aliases = ['remind','remindme'])
 async def reminder(ctx, *args : str):
@@ -880,6 +866,37 @@ def _create_deal_embed(title,img_url,name='Daily Deal'):
         type='rich')
     e.set_thumbnail(url=img_url)
     e.set_author(name=name)
+    return e
+
+def _create_pin_embed(pin):
+    content = pin.content
+    thumb = None
+    if pin.embeds:
+        emb = pin.embeds[0]
+        if 'thumbnail' in emb:
+            thumb = emb['thumbnail']['url']
+        if not content:
+            if emb['title']:
+                content = emb['title']
+            elif emb['description']:
+                content = emb['description']
+    e = discord.Embed(
+        description=content,
+        type='rich',
+        color=0x7289da,
+        timestamp=pin.timestamp
+    )
+    if thumb:
+        e.set_thumbnail(url = thumb)
+    if pin.attachments:
+        e.set_image(url = pin.attachments[0]['url'])
+    e.set_author(
+        name = pin.author.display_name,
+        icon_url = pin.author.avatar_url,
+        url = 'https://discord.com/users/{}'.format(pin.author.id)
+    )
+    e.add_field(name='Original Message:',value='https://discord.com/channels/{}/{}/{}'.format(pin.server.id,pin.channel.id,pin.id),inline=False)
+    e.set_footer(text='#{}'.format(pin.channel.name))
     return e
 
 if __name__ =='__main__':
