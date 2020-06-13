@@ -148,6 +148,25 @@ async def on_reaction_add(reaction,user):
     if reaction.me and user!=bot.user and user is not None:
         await bot.process_reactions((reaction.message.id,user,reaction.emoji))
         await bot.process_reactions((reaction.message.id,None,reaction.emoji),new_author=user)
+
+@bot.event
+async def on_socket_raw_receive(data):
+    # in newer versions of discord.py you can just use the on_guild_channel_pins_update event
+    try:
+        jsondata = json.loads(data)
+        if 't' in jsondata and jsondata['t'] == 'CHANNEL_PINS_UPDATE':
+            chan = bot.get_channel(jsondata['d']['channel_id'])
+            pins = await bot.pins_from(chan)
+            if len(pins) >= DISCORD_PIN_LIMIT:
+                r=bot.cursor.execute('SELECT dest FROM pins WHERE source=?',(chan.id,))
+                dest = r.fetchone()
+                if dest:
+                    pin_channel=bot.get_channel(str(dest[0]))
+                    if pin_channel and _pin_perm_check(chan.server, chan, pin_channel):
+                        await _move_pins(pins[-1:], pin_channel)
+    except:
+        'not valid json, but we dont care'
+
 @bot.event
 async def on_message_edit(before,after):
     datediff = (datetime.datetime.utcnow() - before.timestamp)
@@ -157,16 +176,6 @@ async def on_message_edit(before,after):
             await bot.edited_cleanup(after) # this can error due to race condition
         except:
             pass
-    elif not before.pinned and after.pinned:
-        # if pin limit reached, move 1 pin if pin channel set
-        pins = await bot.pins_from(after.channel)
-        if len(pins) >= DISCORD_PIN_LIMIT:
-            r=bot.cursor.execute('SELECT dest FROM pins WHERE source=?',(after.channel.id,))
-            dest = r.fetchone()
-            if dest:
-                pin_channel=bot.get_channel(str(dest[0]))
-                if pin_channel and _pin_perm_check(after.server, after.channel, pin_channel):
-                    await _move_pins(pins[-1:], pin_channel)
 
 async def cleanup_reactions():
     await bot.wait_until_ready()
@@ -205,14 +214,22 @@ async def forum_announcements():
             try:
                 data = await func()
                 if data:
+                    # get filters from this channel if found.
+                    # compare to filterable string which func() should return. meaning we need to modify func.
+                    # only send embed if filter matches.
                     r=bot.cursor.execute('SELECT channel FROM announce WHERE type=?',(name,))
                     for channel in [i[0] for i in r.fetchall()]:
                         try:
-                            for e in data:
+                            for e,filterstr in data:
+                                r2=bot.cursor.execute('SELECT regexp FROM regexp_filters WHERE type=? AND channel=?',(name,channel))
+                                regex = r2.fetchone()
+                                if regex and filterstr:
+                                    if not re.search(regex[0],filterstr,flags=re.I|re.M):
+                                        continue
                                 await bot.send_message(discord.Object(id=channel), embed=e)
                         except:
                             'channel missing or bot is blocked'
-##                            raise
+                            raise
             except Exception as e:
                 print('error scraping forums (%s): %r'%(name,e))
 ##                raise
@@ -466,8 +483,28 @@ class Alerts:
         
     @commands.command(pass_context=True,aliases=['daily_deals'])
     async def deals(self, ctx, *toggle : str):
-        '''<on|off>
-    Turn daily deal announcements on/off.'''
+        '''<on|off|filter>
+    Turn daily deal announcements on/off.
+    Add a regexp filter with -deals filter <regexp>
+    use the regexp: .* to show all deals.'''
+        destination = ctx.message.channel
+        if not destination.type == PRIVATE_CHANNEL and not ctx.message.author.permissions_in(ctx.message.channel).administrator:
+            await bot.send_message(destination, 'You must be an administrator to use this command.')
+            return
+        if toggle:
+            if (toggle[0] not in ('filter','on','off')):
+                await bot.send_message(destination, 'usage: -{} <on|off|filter>'.format('deals'))
+                return
+            elif toggle[0] == 'filter':
+                if len(toggle)<2:
+                    r = bot.cursor.execute('SELECT regexp FROM regexp_filters WHERE channel=? AND type=?',(ctx.message.channel.id,'dailydeal'))
+                    res = r.fetchone()
+                    await bot.send_message(destination, 'Current filter is: {}'.format(res[0] if res else '.*'))
+                else:
+                    r = bot.cursor.execute('REPLACE INTO regexp_filters (channel,type,regexp) VALUES (?,?,?)',(ctx.message.channel.id,'dailydeal',toggle[1]))
+                    bot.conn.commit()
+                    await bot.send_message(destination, 'Filter set to: {}'.format(toggle[1]))
+                return
         await announce_internals(ctx,' '.join(toggle),'dailydeal','Daily deal announcements','deals')
         
     @commands.command(pass_context=True)
@@ -778,6 +815,7 @@ def _create_gem_embed(data):
     return e
 
 # will return a list of embeds for all "unread" announcements
+# returns tuples of (embed, filterable text or None)
 async def scrape_forum(section = 'https://www.pathofexile.com/forum/view-forum/news', table = 'forum_announcements', header = 'Forum - Announcements'):
     loop = asyncio.get_event_loop() # could also use bot.loop or whatever it is
     future = loop.run_in_executor(None, requests.get, section)
@@ -814,9 +852,10 @@ async def scrape_forum(section = 'https://www.pathofexile.com/forum/view-forum/n
             #announce.
             bot.cursor.execute('INSERT INTO %s (title,url,threadnum) VALUES (?,?,?)'%table,thread)
             bot.conn.commit()
-            announces.append(_create_forum_embed(thread[1],thread[0],header,img=embed_img))
+            announces.append((_create_forum_embed(thread[1],thread[0],header,img=embed_img),None))
     return announces
 
+# returns tuples of (embed, filterable text or None)
 async def scrape_deals(deal_api = 'https://www.pathofexile.com/api/shop/microtransactions/specials?limit=9999'):
 ##    r=bot.cursor.execute('''select 1 from daily_deals where datetime(end_date)>datetime('now')''')
 ##    if r.fetchone(): #ongoing deal, no need to check for new ones.
@@ -827,27 +866,26 @@ async def scrape_deals(deal_api = 'https://www.pathofexile.com/api/shop/microtra
     data.raise_for_status()
     js = data.json()
     if js['total'] == 0:
-        return None
+        return []
     itemhash = hashlib.md5(json.dumps(js, sort_keys=True).encode('utf8')).hexdigest()
-
+    r=bot.cursor.execute('SELECT 1 FROM daily_deals WHERE hash=?',(itemhash,))
+    if r.fetchone():
+        return []
     start_dates = set([i['startAt'] for i in js['entries']])
     latest_deal = sorted(start_dates)[-1]
     latest_deals = sorted([i for i in js['entries'] if i['startAt']==latest_deal], key=lambda x: x['priority'], reverse=True)
     
     img_url = latest_deals[0]['imageUrl']
     end_date = latest_deals[0]['endAt'] # end date isn't accurate as deals could have different end dates.
-    title = ' | '.join([x['microtransaction']['name'] for x in latest_deals][:2])
+    latest_names = [x['microtransaction']['name'] for x in latest_deals]
+    title = ' | '.join(latest_names[:2])
     if int(js['total']) >2:
         title += ' | + %i more'%(int(js['total'])-2)
-    r=bot.cursor.execute('SELECT 1 FROM daily_deals WHERE hash=?',(itemhash,))
-    if r.fetchone():
-        return None
-    else:
-        #announce.
-        bot.cursor.execute('REPLACE INTO daily_deals (title,img_url,hash,end_date) VALUES (?,?,?,?)',(title,img_url,itemhash,end_date))
-        bot.cursor.execute('''DELETE FROM daily_deals WHERE ROWID IN (SELECT ROWID FROM daily_deals ORDER BY ROWID DESC LIMIT -1 OFFSET 7)''')
-        bot.conn.commit()
-        return (_create_deal_embed(title,img_url),)
+    #announce.
+    bot.cursor.execute('REPLACE INTO daily_deals (title,img_url,hash,end_date) VALUES (?,?,?,?)',(title,img_url,itemhash,end_date))
+    bot.cursor.execute('''DELETE FROM daily_deals WHERE ROWID IN (SELECT ROWID FROM daily_deals ORDER BY ROWID DESC LIMIT -1 OFFSET 7)''')
+    bot.conn.commit()
+    return ((_create_deal_embed(title,img_url),'\n'.join(latest_names)),)
 
 def _create_forum_embed(url,title,name='Forum Announcement',thumb_url='https://web.poecdn.com/image/favicon/ogimage.png?v=1',img=None):
     e = discord.Embed(url=url,
@@ -924,6 +962,11 @@ if __name__ =='__main__':
              diff text,
              img_url text,
              PRIMARY KEY (date,diff))''')
+    bot.cursor.execute('''CREATE TABLE IF NOT EXISTS regexp_filters
+             (channel int,
+             type text,
+             regexp text,
+             PRIMARY KEY (channel,type))''')
     try:
         bot.cursor.execute('''ALTER TABLE daily_deals ADD COLUMN end_date real''')
     except sqlite3.OperationalError:
