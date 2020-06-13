@@ -150,22 +150,17 @@ async def on_reaction_add(reaction,user):
         await bot.process_reactions((reaction.message.id,None,reaction.emoji),new_author=user)
 
 @bot.event
-async def on_socket_raw_receive(data):
-    # in newer versions of discord.py you can just use the on_guild_channel_pins_update event
-    try:
-        jsondata = json.loads(data)
-        if 't' in jsondata and jsondata['t'] == 'CHANNEL_PINS_UPDATE':
-            chan = bot.get_channel(jsondata['d']['channel_id'])
-            pins = await bot.pins_from(chan)
-            if len(pins) >= DISCORD_PIN_LIMIT:
-                r=bot.cursor.execute('SELECT dest FROM pins WHERE source=?',(chan.id,))
-                dest = r.fetchone()
-                if dest:
-                    pin_channel=bot.get_channel(str(dest[0]))
-                    if pin_channel and _pin_perm_check(chan.server, chan, pin_channel):
-                        await _move_pins(pins[-1:], pin_channel)
-    except:
-        'not valid json, but we dont care'
+async def on_socket_response(jsondata):
+    if 't' in jsondata and jsondata['t'] == 'CHANNEL_PINS_UPDATE':
+        chan = bot.get_channel(jsondata['d']['channel_id'])
+        pins = await bot.pins_from(chan)
+        if len(pins) >= DISCORD_PIN_LIMIT:
+            r=bot.cursor.execute('SELECT dest FROM pins WHERE source=?',(chan.id,))
+            dest = r.fetchone()
+            if dest:
+                pin_channel=bot.get_channel(str(dest[0]))
+                if pin_channel and _pin_perm_check(chan.server, chan, pin_channel):
+                    await _move_pins(pins[-1:], pin_channel)
 
 @bot.event
 async def on_message_edit(before,after):
