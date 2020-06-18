@@ -1,6 +1,8 @@
 # PoE-Info
 Path of Exile Discord bot with some simple wiki data and forum commands.
 
+#### [Add PoE-Info to your server](https://discordapp.com/oauth2/authorize?client_id=313788924151726082&scope=bot&permissions=0)
+
 ![Example Image](https://raw.githubusercontent.com/NeverDecaf/PoE-Info/master/sample.PNG)
 
 Here is a (maybe not exhaustive) list of commands, run -help to see the updated list:
@@ -23,10 +25,7 @@ Here is a (maybe not exhaustive) list of commands, run -help to see the updated 
 
 type -help <command> for more info on any of these
 
-#### To Run
+#### To run your own instance
 1. Run db.py and let it finish (might take a while)
 after this initial update you should run this file on a schedule to keep your database up-to-date
 2. Put your discord bot token in a file called "token" and run bot.py
-
-#### If you just want this bot in your server
-You can add it via this [link](https://discordapp.com/oauth2/authorize?client_id=313788924151726082&scope=bot&permissions=0).
