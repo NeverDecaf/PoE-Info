@@ -13,7 +13,8 @@ Here is a (maybe not exhaustive) list of commands, run -help to see the updated 
 - announcements -- Toggle notifications for forum announcements
 - patchnotes  -- Toggle notifications for patch note posts
 - events   -- Toggle notifications for events (races)
-- deals   -- Toggle notifications for daily deals
+- deals   -- Toggle notifications for daily deal
+- deals filter  -- Set regexp filter to only show matching deals.
 - pcleague -- Sets league used for pricing items (per-channel).
 - lab	-- Get daily lab layout from poelab.com
 
