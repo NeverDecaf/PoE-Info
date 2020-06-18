@@ -64,7 +64,15 @@ class PoeDB:
         query = '''SELECT * FROM {} left join ninja_data on {}.name=ninja_data.name AND ninja_data.league=? COLLATE NOCASE WHERE {}.{} COLLATE NOCASE LIKE "%"||?||"%" LIMIT {}'''.format(tablename,tablename,tablename,'baseitem' if search_by_baseitem else 'name', limit)
         res=self.cursor.execute(query,(league,searchname.lower(),))
         return res.fetchall()
-    
+
+    def unique_search_explicit(self,keywords,league,limit = 9):
+        query = '''SELECT * FROM unique_items left join ninja_data on unique_items.name=ninja_data.name AND ninja_data.league=? COLLATE NOCASE WHERE unique_items.expl COLLATE NOCASE LIKE "%"||?||"%" COLLATE NOCASE '''
+        for i in range(len(keywords)-1):
+            query+= 'AND unique_items.expl COLLATE NOCASE LIKE "%"||?||"%" COLLATE NOCASE'
+        query+=''' LIMIT {}'''.format(limit)
+        res=self.cursor.execute(query,(league,*keywords))
+        return res.fetchall()
+        
     def get_currency(self,searchname,league,limit = 9,exact = False):
         query = '''SELECT * FROM ninja_currency_data WHERE ninja_currency_data.league=? COLLATE NOCASE AND ninja_currency_data.name COLLATE NOCASE LIKE "%"||?||"%" LIMIT ?'''
         if exact:

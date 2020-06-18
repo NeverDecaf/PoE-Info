@@ -509,10 +509,12 @@ class Alerts:
         await announce_internals(ctx,' '.join(toggle),'event','Event announcements','events')
 class Info:
     'Show info on in-game items. These commands have one letter aliases for quicker use (ex: -u)'
-    @commands.command(pass_context=True,aliases=['u','pc'])
+    @commands.command(pass_context=True,aliases=['u','pc','us'])
     async def unique(self, ctx, *itemname: str):
-        '''<item>
-    Shows stats for an item. Partial names acceptable.'''
+        '''<itemname>
+    Shows stats for an item. Partial names acceptable.
+    search <key words> (alias: -us)
+    Search for items whose explicit mods contain ALL keywords.'''
         if not len(itemname):
             await bot.send_message(ctx.message.channel, 'usage: -u <item name>')
             return
@@ -520,6 +522,25 @@ class Info:
         item = ' '.join(itemname)
         r=bot.cursor.execute('SELECT league FROM pricecheck WHERE channel=?',(ctx.message.channel.id,))
         league = (r.fetchone() or ('tmpStandard',))[0]
+        
+        if itemname[0].lower() == 'search' or ctx.invoked_with == 'us':
+            if (len(itemname) + (ctx.invoked_with == 'us'))<2:
+                await bot.send_message(ctx.message.channel, 'usage: -us <key words>')
+                return
+            data = bot.db.unique_search_explicit(itemname[(ctx.invoked_with != 'us'):],league)
+            if not data:
+                await bot.send_failure_message(ctx.message.channel)
+                return
+            if len(data)>1:
+                #send choices
+                sent_msg= await bot.send_message(ctx.message.channel, 'Multiple Results:\n'+'\n'.join(['%i. %s'%(i+1,datum['name']) for i,datum in enumerate(data)]))
+                for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
+                    await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, data[i], _create_unique_embed)#, _search_result, data[i][3])
+                return
+            e = _create_unique_embed(data[0])
+            await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
+            return
+        
         data = bot.db.get_data('unique_items',item,league)
         if not data:
             data = bot.db.get_data('unique_items',item,league,search_by_baseitem=True)
@@ -534,7 +555,7 @@ class Info:
             return
         e = _create_unique_embed(data[0])
         await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
-        
+
     @commands.command(pass_context=True)
     async def lab(self, ctx, *difficulty: str):
         '''[<difficulty>]
