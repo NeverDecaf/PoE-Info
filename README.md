@@ -1,6 +1,8 @@
 # PoE-Info
 Path of Exile Discord bot with some simple wiki data and forum commands.
 
+![Example Image](https://raw.githubusercontent.com/NeverDecaf/PoE-Info/master/sample.PNG)
+
 Here is a (maybe not exhaustive) list of commands, run -help to see the updated list:
 - help -- List all commands
 - unique `alias: -u` -- Shows stats for a unique item.
@@ -15,8 +17,8 @@ Here is a (maybe not exhaustive) list of commands, run -help to see the updated 
 - pcleague -- Sets league used for pricing items (per-channel).
 - lab	-- Get daily lab layout from poelab.com
 
-- pin	-- Moves pins to a different channel (to overcome discord pin limit)
-- reminder	-- Set reminders (do -reminder timezone first)
+- pin	-- (Automatically) moves pins to a different channel (to overcome discord pin limit)
+- reminder	-- Set reminders (set -reminder timezone first)
 
 type -help <command> for more info on any of these
 
