@@ -3,15 +3,16 @@ Path of Exile Discord bot with some simple wiki data and forum commands.
 
 Here is a (maybe not exhaustive) list of commands, run -help to see the updated list:
 - help -- List all commands
-- unique or -u -- Shows stats for a unique item.
-- skill or -s  --   Shows stats for a skill gem.
-- currency or -c -- Show Chaos rate for a currency item.
+- unique `alias: -u` -- Shows stats for a unique item.
+- unique search `alias: -us` -- Search item explicits for keywords
+- skill `alias: -s` --   Shows stats for a skill gem.
+- currency `alias: -c` -- Show Chaos rate for a currency item.
 - next     --    Displays the upcoming race.
 - announcements -- Toggle notifications for forum announcements
 - patchnotes  -- Toggle notifications for patch note posts
 - events   -- Toggle notifications for events (races)
 - deals   -- Toggle notifications for daily deals
-- pcleague -- Sets league used for pricing items.
+- pcleague -- Sets league used for pricing items (per-channel).
 - lab	-- Get daily lab layout from poelab.com
 
 - pin	-- Moves pins to a different channel (to overcome discord pin limit)
