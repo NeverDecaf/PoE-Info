@@ -68,7 +68,7 @@ class PoeDB:
     def unique_search_explicit(self,keywords,league,limit = 9):
         query = '''SELECT * FROM unique_items left join ninja_data on unique_items.name=ninja_data.name AND ninja_data.league=? COLLATE NOCASE WHERE unique_items.expl COLLATE NOCASE LIKE "%"||?||"%" COLLATE NOCASE '''
         for i in range(len(keywords)-1):
-            query+= 'AND unique_items.expl COLLATE NOCASE LIKE "%"||?||"%" COLLATE NOCASE'
+            query+= 'AND unique_items.expl COLLATE NOCASE LIKE "%"||?||"%" COLLATE NOCASE '
         query+=''' LIMIT {}'''.format(limit)
         res=self.cursor.execute(query,(league,*keywords))
         return res.fetchall()
