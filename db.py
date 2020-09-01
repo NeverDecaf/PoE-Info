@@ -64,7 +64,7 @@ class PoeDB:
         self.conn.commit()
         
     def get_data(self,tablename,searchname,league,limit = 9, search_by_baseitem = False):
-        query = '''SELECT * FROM {} left join ninja_data on trim_variant({}.name)=ninja_data.name AND ninja_data.league=? COLLATE NOCASE WHERE {}.{} COLLATE NOCASE LIKE "%"||?||"%" {} GROUP BY {}.name ORDER BY MAX(chaosValue) LIMIT {}'''.format(tablename,tablename,tablename,'baseitem' if search_by_baseitem else 'name', 'AND drop_enabled' if league not in ('Standard','Hardcore') else '', tablename, limit)
+        query = '''SELECT * FROM {} left join ninja_data on trim_variant({}.name)=ninja_data.name AND ninja_data.league=? COLLATE NOCASE WHERE {}.{} COLLATE NOCASE LIKE "%"||?||"%" {} GROUP BY {}.name ORDER BY MAX(chaosValue) LIMIT {}'''.format(tablename,tablename,tablename,'baseitem' if search_by_baseitem else 'name', 'AND drop_enabled' if league not in ('Standard','Hardcore') and tablename=='unique_items' else '', tablename, limit)
         res=self.cursor.execute(query,(league,searchname.lower(),))
         return res.fetchall()
 
