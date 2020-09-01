@@ -11,6 +11,8 @@ import html
 import time
 from json.decoder import JSONDecodeError
 import xml.etree.ElementTree as xt
+import cloudscraper
+from lxml import html as lxmlhtml
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
@@ -422,17 +424,23 @@ def get_lab_urls(date):
         date is format: %Y-%m-%d'''
     labpages = []
     ret = []
-    with requests.get('https://www.poelab.com/') as r:
-        for lab in re.findall('su-clearfix[^>]*">(.*?)<\/div>',r.text,re.I|re.M|re.S):
-            labpages.append(re.findall('href="([^"]*)',lab)[0])
-    for url in reversed(labpages):
-        with requests.get(url) as r:
-            t = re.findall('"notesImg"[^>]*?src="([^"]*)',r.text,re.S)[0]
+    scraper = cloudscraper.create_scraper()
+    with scraper.get('https://www.poelab.com/') as r:
+        etree = lxmlhtml.fromstring(r.text)
+        labpages= etree.xpath('//h2/a[@class="redLink"]/@href')
+    for url in reversed(labpages[:4]):
+        with scraper.get(url) as r:
+            etree = lxmlhtml.fromstring(r.text)
+            t = etree.xpath('//img[@id="notesImg"]/@src')
+            if t:
+                t=t[0]
             if date not in t:
                 ret.append(None)
             else:
                 ret.append(t)
     return ret
 if __name__ == '__main__':
-    print(get_ninja_rates())
+    # print(get_ninja_rates())
+    import datetime
+    print(get_lab_urls(datetime.datetime.utcnow().strftime('%Y-%m-%d')))
     
