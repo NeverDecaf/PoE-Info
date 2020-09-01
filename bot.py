@@ -1015,4 +1015,4 @@ if __name__ =='__main__':
         tasks = [bot.start(f.read()),bot.loop.create_task(cleanup_reactions()),bot.loop.create_task(forum_announcements()),bot.loop.create_task(send_reminders())]
         bot.loop.run_until_complete(asyncio.gather(*tasks))
 
-##https://discordapp.com/oauth2/authorize?client_id=313788924151726082&scope=bot&permissions=0
+##https://discord.com/oauth2/authorize?client_id=313788924151726082&scope=bot&permissions=0

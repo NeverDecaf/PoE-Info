@@ -61,7 +61,7 @@ class PoeDB:
         self.conn.commit()
         
     def get_data(self,tablename,searchname,league,limit = 9, search_by_baseitem = False):
-        query = '''SELECT * FROM {} left join ninja_data on {}.name=ninja_data.name AND ninja_data.league=? COLLATE NOCASE WHERE {}.{} COLLATE NOCASE LIKE "%"||?||"%" LIMIT {}'''.format(tablename,tablename,tablename,'baseitem' if search_by_baseitem else 'name', limit)
+        query = '''SELECT * FROM {} left join ninja_data on {}.name=ninja_data.name AND ninja_data.league=? COLLATE NOCASE WHERE {}.{} COLLATE NOCASE LIKE "%"||?||"%" {} LIMIT {}'''.format(tablename,tablename,tablename,'baseitem' if search_by_baseitem else 'name', 'AND drop_enabled' if league not in ('Standard','Hardcore') else '', limit)
         res=self.cursor.execute(query,(league,searchname.lower(),))
         return res.fetchall()
 
@@ -69,6 +69,8 @@ class PoeDB:
         query = '''SELECT * FROM unique_items left join ninja_data on unique_items.name=ninja_data.name AND ninja_data.league=? COLLATE NOCASE WHERE unique_items.expl COLLATE NOCASE LIKE "%"||?||"%" COLLATE NOCASE '''
         for i in range(len(keywords)-1):
             query+= 'AND unique_items.expl COLLATE NOCASE LIKE "%"||?||"%" COLLATE NOCASE '
+        if league not in ('Standard','Hardcore'):
+            query += 'AND drop_enabled'
         query+=''' LIMIT {}'''.format(limit)
         res=self.cursor.execute(query,(league,*keywords))
         return res.fetchall()
@@ -145,16 +147,19 @@ class PoeDB:
         self.cursor=None
 
     def reset(self):
-        self.cursor.execute('''DELETE FROM unique_items''')
-        self.cursor.execute('''DELETE FROM skill_gems''')
-        self.cursor.execute('''DELETE FROM ninja_data''')
-        self.cursor.execute('''DELETE FROM ninja_currency_data''')
+        self.cursor.execute('''DROP TABLE unique_items''')
+        self.cursor.execute('''DROP TABLE skill_gems''')
+        self.cursor.execute('''DROP TABLE ninja_data''')
+        self.cursor.execute('''DROP TABLE ninja_currency_data''')
+        self._create_tables()
         self.conn.commit()
 
 if __name__=='__main__':
     import sys
+    import datetime
     
     a = PoeDB()
+    print(datetime.datetime.now())
     if len(sys.argv)>1 and sys.argv[1]=='-r':
         a.reset()
     if len(sys.argv)>1 and sys.argv[1]=='-pc':

@@ -60,7 +60,6 @@ def format_affixes(item_list):
                 prepared_style_variants = r.json()
         except:
                 prepared_style_variants={}
-        
         style_variant_included = []
         for item in item_list:
                 if regex_wiki_page_disamb.search(item['name']) is not None:
@@ -162,7 +161,6 @@ def scrape_skill_gems(limit=100000):
         query_limit = 500
         rowindex = 0
         last_rowid = -1
-        fields_to_fetch = list(SKILL_GEM_PROPERTY_MAPPING.values())
         keyed_results = {}
 
         while rowindex<limit:
@@ -247,6 +245,7 @@ UNIQUE_ITEM_PROPERTY_MAPPING={
         'flasks.duration_range_text':'flaskduration',
         'flasks.charges_per_use_range_text':'flaskchargesused',
         
+        'items.drop_enabled':'drop_enabled'
 }
 
 #image_url is only available if we were lucky enough to scrape it from the db.
@@ -288,7 +287,6 @@ def get_image_url(pageName, image_url, is_div_card=False):
 
 def scrape_unique_items(limit=50000):
         full_results=[]
-        fields_to_fetch = list(SKILL_GEM_PROPERTY_MAPPING.values())
         rowindex = 0
         query_limit = 500
         last_rowid = -1 # adds 1 to this.
@@ -410,7 +408,7 @@ def get_ninja_rates(league='tmpStandard'):
             try:
                     rj = r.json()
             except JSONDecodeError:
-                    print("Error fetching currency data for:",type,'in',league)
+                    print("Error fetching currency data for:",type,'in',league,'(normal for event leagues)')
                     continue
             for x in rj['lines']:
                     data.append({'name':x['name'], 'chaosValue':x['chaosValue']})
