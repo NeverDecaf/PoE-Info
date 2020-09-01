@@ -53,13 +53,14 @@ def format_affixes(item_list):
         new_data = []
         
         # manually prepared formatting for style variant items
+        # try:
+                # r=requests.get('https://raw.githubusercontent.com/aRTy42/scrape_poe_info/master/UniqueStyleVariants.json')
+                # r.encoding='utf8'
+                # prepared_style_variants = r.json()
+        # except:
+                # prepared_style_variants={}
+        prepared_style_variants = {}
         
-        try:
-                r=requests.get('https://raw.githubusercontent.com/aRTy42/scrape_poe_info/master/UniqueStyleVariants.json')
-                r.encoding='utf8'
-                prepared_style_variants = r.json()
-        except:
-                prepared_style_variants={}
         style_variant_included = []
         for item in item_list:
                 if regex_wiki_page_disamb.search(item['name']) is not None:

@@ -24,6 +24,9 @@ class PoeDB:
         else:
             self.conn=sqlite3.connect(self.db)
         self.conn.row_factory = sqlite3.Row
+        def _trim_variant(itemname):
+            return re.sub(' ?\([^)]*\)','',itemname)
+        self.conn.create_function('trim_variant',1,_trim_variant)
         self.cursor=self.conn.cursor()
     
     def _create_tables(self):
@@ -61,7 +64,7 @@ class PoeDB:
         self.conn.commit()
         
     def get_data(self,tablename,searchname,league,limit = 9, search_by_baseitem = False):
-        query = '''SELECT * FROM {} left join ninja_data on {}.name=ninja_data.name AND ninja_data.league=? COLLATE NOCASE WHERE {}.{} COLLATE NOCASE LIKE "%"||?||"%" {} LIMIT {}'''.format(tablename,tablename,tablename,'baseitem' if search_by_baseitem else 'name', 'AND drop_enabled' if league not in ('Standard','Hardcore') else '', limit)
+        query = '''SELECT * FROM {} left join ninja_data on trim_variant({}.name)=ninja_data.name AND ninja_data.league=? COLLATE NOCASE WHERE {}.{} COLLATE NOCASE LIKE "%"||?||"%" {} GROUP BY {}.name ORDER BY MAX(chaosValue) LIMIT {}'''.format(tablename,tablename,tablename,'baseitem' if search_by_baseitem else 'name', 'AND drop_enabled' if league not in ('Standard','Hardcore') else '', tablename, limit)
         res=self.cursor.execute(query,(league,searchname.lower(),))
         return res.fetchall()
 
@@ -71,7 +74,7 @@ class PoeDB:
             query+= 'AND unique_items.expl COLLATE NOCASE LIKE "%"||?||"%" COLLATE NOCASE '
         if league not in ('Standard','Hardcore'):
             query += 'AND drop_enabled'
-        query+=''' LIMIT {}'''.format(limit)
+        query+=''' GROUP BY unique_items.name ORDER BY MAX(chaosValue) LIMIT {}'''.format(limit)
         res=self.cursor.execute(query,(league,*keywords))
         return res.fetchall()
         
