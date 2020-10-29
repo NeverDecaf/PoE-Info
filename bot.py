@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.6
 import discord
-from discord.ext import commands
+from discord.ext import commands,tasks
 import asyncio
 import os
 import db
@@ -47,15 +47,14 @@ class BotWithReactions(commands.Bot):
     DEFAULT_FAILURE_MSG = '```No Results.```'
     async def send_failure_message(self,destination,failure_message=DEFAULT_FAILURE_MSG,message=None,**kwargs):
         ''' message is the user message the bot is replying to. if provided we can autodelete failure messages if the original is edited. '''
-        sent_msg = await super().send_message(destination,content=failure_message, **kwargs)
+        sent_msg = await destination.send(content=failure_message, **kwargs)
         if not destination.type == PRIVATE_CHANNEL:
             self.AUTO_CLEANUP[message or self.CLEANUP_KEY] = (time.time(),sent_msg)
             self.CLEANUP_KEY = (self.CLEANUP_KEY+1)%1000000
         return sent_msg
-    async def send_file(self, destination, fp, failure_message=DEFAULT_FAILURE_MSG, **kwargs):
+    async def send_file(self, destination, fp, failure_message=DEFAULT_FAILURE_MSG, filename='file.png', **kwargs):
         if fp:
-            # we don't add ``` around the content here as it looks too bulky.
-            sent_msg = await super().send_file(destination, fp, **kwargs)
+            sent_msg = await destination.send(file=discord.File(fp, filename),**kwargs)
         else:
             sent_msg = await self.send_failure_message(destination,failure_message = failure_message)
         return sent_msg
@@ -63,7 +62,7 @@ class BotWithReactions(commands.Bot):
         if content and code_block:
             content = '```'+content.strip('`').rstrip('`')+'```' # turn our message into a code block.
         if content or kwargs.get('embed'): # if message is blank and no embed, send failure message instead
-            sent_msg = await super().send_message(destination,content=content, **kwargs)
+            sent_msg = await destination.send(content=content, **kwargs)
         else:
             sent_msg = await self.send_failure_message(destination,failure_message = failure_message)
         return sent_msg
@@ -74,8 +73,8 @@ class BotWithReactions(commands.Bot):
         only works in public channels. in PMs the message will be sent as normal.
         '''
         sent_msg = await self.send_file(*args, **kwargs)
-        if isinstance(args[0],discord.channel.Channel) and not sent_msg.content == self.DEFAULT_FAILURE_MSG:
-            await self.attach_button(sent_msg,author,self.DELETE_EMOJI,lambda x,y:self.delete_message(x))
+        if isinstance(args[0],discord.abc.GuildChannel) and not sent_msg.content == self.DEFAULT_FAILURE_MSG:
+            await self.attach_button(sent_msg,author,self.DELETE_EMOJI,lambda x,y,z:self.delete_message(x))
         return sent_msg
     async def send_deletable_message(self,author,*args, code_block = True, **kwargs):
         '''
@@ -84,18 +83,30 @@ class BotWithReactions(commands.Bot):
         only works in public channels. in PMs the message will be sent as normal.
         '''
         sent_msg = await self.send_message(*args, code_block=code_block, **kwargs)
-        if isinstance(args[0],discord.channel.Channel) and not sent_msg.content == self.DEFAULT_FAILURE_MSG:
-            await self.attach_button(sent_msg,author,self.DELETE_EMOJI,lambda x,y:self.delete_message(x))
+        if isinstance(args[0],discord.abc.GuildChannel) and not sent_msg.content == self.DEFAULT_FAILURE_MSG:
+            await self.attach_button(sent_msg,author,self.DELETE_EMOJI,lambda x,y,z:self.delete_message(x))
         return sent_msg
-    async def attach_button(self, message, author, emoji, callback, *data, user_restricted=True):
+    async def attach_button(self, message, author, emoji, callback, *data, user_restricted=True, single_use=False, **kwargs):
         '''Add a reaction button. When pressed callback will be called with message,author,*data as arguments.'''
         try:
-            await self.add_reaction(message,emoji)
+            key = (message.id,emoji)
+            if key not in self.REACTIONBUTTONS:
+                await message.add_reaction(emoji)
             if not user_restricted:
                 author = None
-            self.REACTIONBUTTONS[(message.id,author,emoji)]=(time.time(),callback,message,*data)
+            self.REACTIONBUTTONS[key]=(time.time(),callback,message,single_use,author,*data,kwargs)
         except discord.errors.NotFound:
             pass # this one means the message/reaction was deleted already so no big deal just ignore
+    async def remove_button(self, msg, emoji):
+        ''' removes an emojibutton, key is (msg.id,emoji) '''
+        key = (msg.id,emoji)
+        self.REACTIONBUTTONS.pop(key,None)
+        try:
+            await remove_all_reactions(msg,emoji)
+        except (discord.errors.NotFound, discord.errors.Forbidden):
+            # this one means the message/reaction was deleted already so no big deal just ignore
+            # Forbidden will occur if trying to delete other users emotes without permission
+            pass
     async def auto_cleanup(self):
         now = time.time()
         while len(self.AUTO_CLEANUP):
@@ -111,159 +122,123 @@ class BotWithReactions(commands.Bot):
             del self.AUTO_CLEANUP[msg] # there is a race condition here as auto cleanup can occur in the same instant as this del
             await self.delete_message(todel)
             
-    async def process_reactions(self,key,new_author=None):
+    async def process_reactions(self,message_id,emoji,new_author=None,remove=False):
         '''call this in on_reaction_add. For non-restricted buttons new_author must be passed (this will be the user allowed to delete the new message)
            After a reaction is pressed the button/reaction will be removed.'''
+        key = (message_id, emoji)
         if key in self.REACTIONBUTTONS:
-            emoji = key[2]
-            author = key[1]
-            _,callback,msg,*data=self.REACTIONBUTTONS[key]
+            emoji = key[1]
+            _,callback,msg,single_use,author,*data,kwargs=self.REACTIONBUTTONS[key]
+            if author != None and author != new_author:
+                return
+            if single_use:
+                self.REACTIONBUTTONS.pop(key,None)
+                try:
+                    await remove_all_reactions(msg,emoji)
+                except discord.errors.NotFound:
+                    pass # this one means the message/reaction was deleted already so no big deal just ignore
             if new_author:
-                await callback(msg,new_author,*data)
+                await callback(msg,new_author,remove,*data,**kwargs)
             else:
-                await callback(msg,author,*data)
-            del self.REACTIONBUTTONS[key]
-            try:
-                await self.remove_reaction(msg,emoji,self.user)
-            except discord.errors.NotFound:
-                pass # this one means the message/reaction was deleted already so no big deal just ignore
+                await callback(msg,author,remove,*data,**kwargs)
+                
     async def remove_stale_reactions(self):
         '''Run this every ~1 second in a background loop. This simply removes reactions that have expired. (set REACTION_TIMEOUT)'''
         now = time.time()
         for key in list(self.REACTIONBUTTONS.keys()):
-            emoji = key[2]
+            emoji = key[1]
             msg_timestamp,_,msg,*_=self.REACTIONBUTTONS[key]
             if now-msg_timestamp>self.REACTION_TIMEOUT:
-                del self.REACTIONBUTTONS[key]
+                self.REACTIONBUTTONS.pop(key,None)
                 try:
-                    await self.remove_reaction(msg,emoji,self.user)
+                    await self.remove_all_reactions(msg,emoji)
                 except discord.errors.NotFound:
                     pass # this one means the message/reaction was deleted already so no big deal just ignore
 
-                
-bot = BotWithReactions(command_prefix='-', description='PoE Info.')
-
-@bot.event
-async def on_reaction_add(reaction,user):
-    if reaction.me and user!=bot.user and user is not None:
-        await bot.process_reactions((reaction.message.id,user,reaction.emoji))
-        await bot.process_reactions((reaction.message.id,None,reaction.emoji),new_author=user)
-
-@bot.event
-async def on_socket_response(jsondata):
-    if 't' in jsondata and jsondata['t'] == 'CHANNEL_PINS_UPDATE':
-        chan = bot.get_channel(jsondata['d']['channel_id'])
-        pins = await bot.pins_from(chan)
-        if len(pins) >= DISCORD_PIN_LIMIT:
-            r=bot.cursor.execute('SELECT dest FROM pins WHERE source=?',(chan.id,))
-            dest = r.fetchone()
-            if dest:
-                pin_channel=bot.get_channel(str(dest[0]))
-                if pin_channel and _pin_perm_check(chan.server, chan, pin_channel):
-                    await _move_pins(pins[-1:], pin_channel)
-
-@bot.event
-async def on_message_edit(before,after):
-    datediff = (datetime.datetime.utcnow() - before.timestamp)
-    if before.content!=after.content and datediff.days<1 and datediff.seconds<MESSAGE_EDITABLE_TIMEOUT: # need this check because auto-embed counts as editing
-        await bot.process_commands(after)
+    async def on_reaction_add(self,reaction,user):
+        if reaction.me and user!=self.user and user is not None:
+            await self.process_reactions(reaction.message.id,reaction.emoji,new_author=user)
+    async def on_reaction_remove(self,reaction,user):
+        if reaction.me and user!=self.user and user is not None:
+            await self.process_reactions(reaction.message.id,reaction.emoji,new_author=user,remove=True)
+    async def on_message_edit(self,before,after):
+        datediff = (datetime.datetime.utcnow() - before.created_at)
+        if before.content!=after.content and datediff.days<1 and datediff.seconds<MESSAGE_EDITABLE_TIMEOUT: # need this check because auto-embed counts as editing
+            await self.process_commands(after)
+            try:
+                await self.edited_cleanup(after) # this can error due to race condition
+            except:
+                pass
+            
+    async def on_ready(self):
+        await self.change_presence(activity=discord.Game(name=self.command_prefix+'help'))
+        self.cleanup_reactions.start()
+    @tasks.loop(seconds=60.0)
+    async def cleanup_reactions(self):
         try:
-            await bot.edited_cleanup(after) # this can error due to race condition
-        except:
-            pass
-
-async def cleanup_reactions():
-    await bot.wait_until_ready()
-    await bot.wait_until_login() # just in case .is_closed is true before login.
-    while not bot.is_closed:
-        try:
-            events = bot.db.upcoming_event()
-            nextevent = bot.db.event_ending()
+            events = self.db.upcoming_event()
+            nextevent = self.db.event_ending()
             if events or nextevent:
-                r=bot.cursor.execute('SELECT channel FROM announce WHERE type="event"')
+                r=self.cursor.execute('SELECT channel FROM announce WHERE type="event"')
                 for channel in [i[0] for i in r.fetchall()]:
                     try:
                         if events:
                             for event in events:
-                                await bot.send_message(discord.Object(id=channel), '%s'%str(event[0]))
+                                await self.send_message(self.get_channel(channel), '%s'%str(event[0]))
                         if nextevent:
-                            await bot.send_message(discord.Object(id=channel), 'diff\n%s'%nextevent)
+                            await self.send_message(self.get_channel(channel), 'diff\n%s'%nextevent)
                     except:
-##                        raise
                         'channel missing or bot is blocked'
-            await bot.remove_stale_reactions()
-            await bot.auto_cleanup()
+            await self.remove_stale_reactions()
+            await self.auto_cleanup()
         except:
-##            raise
             'just for extra safety because an error here means the loop stops'
-        await asyncio.sleep(10)
+    @cleanup_reactions.before_loop
+    async def before_run(self):
+        await self.wait_until_ready()
+    
+    # compatibility funcs for discord 0.9
+    async def delete_message(self, msg):
+        ''' for backwards compatibility '''
+        return await msg.delete()
+    async def remove_all_reactions(self, msg, emo):
+        ''' for backwards compatibility '''
+        for r in [m for m in msg.reactions if m.emoji==emo]:
+            await r.clear()
+    async def remove_reaction(self, msg, emo, user):
+        ''' for backwards compatibility '''
+        return await msg.remove_reaction(emo,user)
+    async def unpin_message(self, msg):
+        ''' for backwards compatibility '''
+        return await msg.unpin()
+    async def pins_from(self, channel):
+        ''' for backwards compatibility '''
+        return await channel.pins()
+            
+bot = BotWithReactions(command_prefix='-', description='PoE Info.')
 
-async def forum_announcements():
-    await bot.wait_until_ready()
-    await bot.wait_until_login() # just in case .is_closed is true before login.
-    while not bot.is_closed:
-        announce_types = [('forumannounce',partial(scrape_forum)),
-                          ('patchnotes',partial(scrape_forum,'https://www.pathofexile.com/forum/view-forum/patch-notes','patch_notes','Forum - Patch Notes')),
-                           ('dailydeal',partial(scrape_deals))]
-        for name,func in announce_types:
-            try:
-                data = await func()
-                if data:
-                    # get filters from this channel if found.
-                    # compare to filterable string which func() should return. meaning we need to modify func.
-                    # only send embed if filter matches.
-                    r=bot.cursor.execute('SELECT channel FROM announce WHERE type=?',(name,))
-                    for channel in [i[0] for i in r.fetchall()]:
-                        try:
-                            for e,filterstr in data:
-                                r2=bot.cursor.execute('SELECT regexp FROM regexp_filters WHERE type=? AND channel=?',(name,channel))
-                                regex = r2.fetchone()
-                                if regex and filterstr:
-                                    if not re.search(regex[0],filterstr,flags=re.I|re.M):
-                                        continue
-                                await bot.send_message(discord.Object(id=channel), embed=e)
-                        except:
-                            'channel missing or bot is blocked'
-                            raise
-            except Exception as e:
-                print('error scraping forums (%s): %r'%(name,e))
-##                raise
-                'just for extra safety because an error here means the loop stops'
-                'this can be caused by things like maintenance'
-        await asyncio.sleep(60)
+@bot.listen()
+async def on_guild_channel_pins_update(chan, last_pin):
+    pins = await bot.pins_from(chan)
+    if len(pins) >= DISCORD_PIN_LIMIT:
+        r=bot.cursor.execute('SELECT dest FROM pins WHERE source=?',(chan.id,))
+        dest = r.fetchone()
+        if dest:
+            pin_channel=bot.get_channel(dest[0])
+            if pin_channel and _pin_perm_check(chan.guild, chan, pin_channel):
+                await _move_pins(pins[-1:], pin_channel)
 
-async def send_reminders():
-    await bot.wait_until_ready()
-    await bot.wait_until_login() # just in case .is_closed is true before login.
-    while not bot.is_closed:
-        r=bot.cursor.execute('''SELECT creator,role,channel,server,datetime,message FROM reminders WHERE datetime <= datetime('now')''')
-        for row in r.fetchall():
-            'announce and delete.'
-            try:
-                await bot.send_message(discord.Object(id=row[2]), '<@{}> {}'.format(row[0],row[5]),code_block=False)
-            except:
-                'channel missing or bot is blocked'
-            finally:
-                try:
-                    bot.cursor.execute('DELETE FROM reminders WHERE creator = ? and role = ? and channel = ? and server = ? and datetime = ? and message = ?', row)
-                    bot.conn.commit()
-                except:
-                    pass
-        await asyncio.sleep(5)
-
-@bot.event
+@bot.listen()
 async def on_ready():
     print('Logged in as')
     print(bot.user.name)
     print(bot.user.id)
     print('------')
-    await bot.change_presence(game=discord.Game(name='-help'))
     
 @bot.command(pass_context=True)
 async def pin(ctx, *count : str):
     '''<count>|<set>
 Number of pins to move OR set a channel for pins.'''
-##    for chan in ctx.message.server.channels:
     if not ctx.message.author.permissions_in(ctx.message.channel).administrator:
         await bot.send_message(ctx.message.channel, 'You must be an administrator to use this command.')
         return
@@ -274,8 +249,8 @@ Number of pins to move OR set a channel for pins.'''
             return
         try:
             just_id = count[1][2:-1]
-            ch = bot.get_channel(just_id)
-            if ch and _pin_perm_check(ctx.message.server,ctx.message.channel,ch):
+            ch = bot.get_channel(int(just_id))
+            if ch and _pin_perm_check(ctx.message.guild,ctx.message.channel,ch):
                 bot.cursor.execute('REPLACE INTO pins(source,dest) VALUES(?,?)',(ctx.message.channel.id,just_id))
                 bot.conn.commit()
                 await bot.send_message(ctx.message.channel, 'Set pin destination for {} to {}'.format(ctx.message.channel.mention,ch.mention),code_block=False)
@@ -298,9 +273,9 @@ Number of pins to move OR set a channel for pins.'''
     if not dest:
         await bot.send_message(ctx.message.channel, 'No destination channel set for pins, use -pin set <channel>')
         return
-    pin_channel=bot.get_channel(str(dest[0]))
+    pin_channel=bot.get_channel(dest[0])
     # do a extra permissions check for safety:
-    if pin_channel and _pin_perm_check(ctx.message.server,ctx.message.channel,pin_channel):
+    if pin_channel and _pin_perm_check(ctx.message.guild,ctx.message.channel,pin_channel):
         pins = await bot.pins_from(ctx.message.channel)
         await _move_pins(list(reversed(pins))[:min(len(pins),int(count[0]))],pin_channel)
     else:
@@ -333,7 +308,7 @@ reminder timezone <tz> - set timezone for date reminders'''
     if not len(args):
         await bot.send_message(ctx.message.channel, helpmsg)
         return
-    server_id = ctx.message.server and ctx.message.server.id or ctx.message.channel.id
+    server_id = ctx.message.guild and ctx.message.guild.id or ctx.message.channel.id
     subcmd = args[0]
     r = bot.cursor.execute('SELECT timezone from timezones where server=?',(server_id,)).fetchone()
     settings = {'TIMEZONE':(r and r[0]) or 'UTC', 'TO_TIMEZONE':'UTC', 'PREFER_DATES_FROM': 'future'}
@@ -384,8 +359,8 @@ reminder timezone <tz> - set timezone for date reminders'''
         # if not ctx.message.author.permissions_in(ctx.message.channel).administrator:
             # await bot.send_message(ctx.message.channel, 'You must be an administrator to set reminders for a role')
             # return
-        # print([role.name for role in ctx.message.server.roles],subcmd[1:])
-        # validroles = [role for role in ctx.message.server.roles if role.name==subcmd[1:]]
+        # print([role.name for role in ctx.message.guild.roles],subcmd[1:])
+        # validroles = [role for role in ctx.message.guild.roles if role.name==subcmd[1:]]
         # if not validroles:
             # await bot.send_message(ctx.message.channel, 'Role not found.',code_block=False)
             # return
@@ -462,7 +437,7 @@ Set league for pricing in this channel, options are: tmpStandard, tmpHardcore, e
         await bot.send_message(destination, 'Now pricechecking in {}.'.format(db.VALID_PC_LEAGUES[i]))
     except ValueError:
         await bot.send_message(destination, 'Not a valid league, must be one of: tmpStandard, tmpHardcore, eventStandard, eventHardcore, Standard, Hardcore')
-class Alerts:
+class Alerts(commands.Cog):
     '''Toggle on/off automatic annoucements of the following:'''
     @commands.command(pass_context=True)
     async def announcements(self, ctx, *toggle : str):
@@ -507,7 +482,7 @@ class Alerts:
         '''<on|off>
     Turn event announcements on/off.'''
         await announce_internals(ctx,' '.join(toggle),'event','Event announcements','events')
-class Info:
+class Info(commands.Cog):
     'Show info on in-game items. These commands have one letter aliases for quicker use (ex: -u)'
     @commands.command(pass_context=True,aliases=['u','pc','us'])
     async def unique(self, ctx, *itemname: str):
@@ -632,7 +607,7 @@ def _cache_labs():
             bot.cursor.execute('REPLACE INTO daily_labs (date,diff,img_url) VALUES (?,?,?)',(today,lab,url))
     bot.cursor.execute('DELETE FROM daily_labs WHERE date <> ?',(today,))
     bot.conn.commit()
-async def _search_result(msg, author, data, _func):
+async def _search_result(msg, author, remove, data, _func):
     e = _func(data)
     await bot.send_deletable_message(author, msg.channel, embed=e)
     await bot.delete_message(msg)
@@ -927,18 +902,18 @@ def _create_pin_embed(pin):
     thumb = None
     if pin.embeds:
         emb = pin.embeds[0]
-        if 'thumbnail' in emb:
-            thumb = emb['thumbnail']['url']
+        if emb.thumbnail != discord.Embed.Empty:
+            thumb = emb.thumbnail.url
         if not content:
-            if emb['title']:
-                content = emb['title']
-            elif emb['description']:
-                content = emb['description']
+            if emb.title != discord.Embed.Empty:
+                content = emb.title
+            elif emb.description != discord.Embed.Empty:
+                content = emb.description
     e = discord.Embed(
         description=content,
         type='rich',
         color=0x7289da,
-        timestamp=pin.timestamp
+        timestamp=pin.created_at
     )
     if thumb:
         e.set_thumbnail(url = thumb)
@@ -949,10 +924,72 @@ def _create_pin_embed(pin):
         icon_url = pin.author.avatar_url,
         url = 'https://discord.com/users/{}'.format(pin.author.id)
     )
-    e.add_field(name='Original Message:',value='https://discord.com/channels/{}/{}/{}'.format(pin.server.id,pin.channel.id,pin.id),inline=False)
+    e.add_field(name='Original Message:',value='https://discord.com/channels/{}/{}/{}'.format(pin.guild.id,pin.channel.id,pin.id),inline=False)
     e.set_footer(text='#{}'.format(pin.channel.name))
     return e
 
+class backgroundTasks(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.reminders.start()
+        self.forum_announcements.start()
+
+    def cog_unload(self):
+        self.reminders.cancel()
+        self.forum_announcements.cancel()
+        
+    @tasks.loop(seconds=5.0)
+    async def reminders(self):
+        r=bot.cursor.execute('''SELECT creator,role,channel,server,datetime,message FROM reminders WHERE datetime <= datetime('now')''')
+        for row in r.fetchall():
+            'announce and delete.'
+            try:
+                await bot.send_message(bot.get_channel(row[2]), '<@{}> {}'.format(row[0],row[5]),code_block=False)
+            except:
+                'channel missing or bot is blocked'
+            finally:
+                try:
+                    bot.cursor.execute('DELETE FROM reminders WHERE creator = ? and role = ? and channel = ? and server = ? and datetime = ? and message = ?', row)
+                    bot.conn.commit()
+                except:
+                    pass
+            
+    @tasks.loop(seconds=60.0)
+    async def forum_announcements(self):
+        announce_types = [('forumannounce',partial(scrape_forum)),
+                          ('patchnotes',partial(scrape_forum,'https://www.pathofexile.com/forum/view-forum/patch-notes','patch_notes','Forum - Patch Notes')),
+                           ('dailydeal',partial(scrape_deals))]
+        for name,func in announce_types:
+            try:
+                data = await func()
+                if data:
+                    # get filters from this channel if found.
+                    # compare to filterable string which func() should return. meaning we need to modify func.
+                    # only send embed if filter matches.
+                    r=bot.cursor.execute('SELECT channel FROM announce WHERE type=?',(name,))
+                    for channel in [i[0] for i in r.fetchall()]:
+                        try:
+                            for e,filterstr in data:
+                                r2=bot.cursor.execute('SELECT regexp FROM regexp_filters WHERE type=? AND channel=?',(name,channel))
+                                regex = r2.fetchone()
+                                if regex and filterstr:
+                                    if not re.search(regex[0],filterstr,flags=re.I|re.M):
+                                        continue
+                                await bot.send_message(bot.get_channel(channel), embed=e)
+                        except:
+                            'channel missing or bot is blocked'
+                            # raise
+            except Exception as e:
+                print('error scraping forums (%s): %r'%(name,e))
+##                raise
+                'just for extra safety because an error here means the loop stops'
+                'this can be caused by things like maintenance'
+
+    @reminders.before_loop
+    @forum_announcements.before_loop
+    async def before_run(self):
+        await self.bot.wait_until_ready()
+        
 if __name__ =='__main__':
     bot.db = db.PoeDB(ro=True)
     bot.conn = sqlite3.connect('announce.sqlitedb')
@@ -1010,9 +1047,8 @@ if __name__ =='__main__':
     cogs.setup_all_cogs(bot)
     bot.add_cog(Alerts())
     bot.add_cog(Info())
+    bot.add_cog(backgroundTasks(bot))
     with open('token','r') as f:
-        # if any (background) task raises an exception, end this bot.
-        tasks = [bot.start(f.read()),bot.loop.create_task(cleanup_reactions()),bot.loop.create_task(forum_announcements()),bot.loop.create_task(send_reminders())]
-        bot.loop.run_until_complete(asyncio.gather(*tasks))
+        bot.run(f.read())
 
 ##https://discord.com/oauth2/authorize?client_id=313788924151726082&scope=bot&permissions=0
