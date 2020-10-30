@@ -102,7 +102,7 @@ class BotWithReactions(commands.Bot):
         key = (msg.id,emoji)
         self.REACTIONBUTTONS.pop(key,None)
         try:
-            await remove_all_reactions(msg,emoji)
+            await self.remove_all_reactions(msg,emoji)
         except (discord.errors.NotFound, discord.errors.Forbidden):
             # this one means the message/reaction was deleted already so no big deal just ignore
             # Forbidden will occur if trying to delete other users emotes without permission
@@ -134,7 +134,7 @@ class BotWithReactions(commands.Bot):
             if single_use:
                 self.REACTIONBUTTONS.pop(key,None)
                 try:
-                    await remove_all_reactions(msg,emoji)
+                    await self.remove_all_reactions(msg,emoji)
                 except discord.errors.NotFound:
                     pass # this one means the message/reaction was deleted already so no big deal just ignore
             if new_author:
@@ -203,7 +203,8 @@ class BotWithReactions(commands.Bot):
         return await msg.delete()
     async def remove_all_reactions(self, msg, emo):
         ''' for backwards compatibility '''
-        for r in [m for m in msg.reactions if m.emoji==emo]:
+        cache_msg = discord.utils.get(self.cached_messages, id=msg.id)
+        for r in [m for m in cache_msg.reactions if m.emoji==emo]:
             await r.clear()
     async def remove_reaction(self, msg, emo, user):
         ''' for backwards compatibility '''
@@ -214,6 +215,10 @@ class BotWithReactions(commands.Bot):
     async def pins_from(self, channel):
         ''' for backwards compatibility '''
         return await channel.pins()
+    async def edit_message(self, msg, **fields):
+        ''' for backwards compatibility '''
+        await msg.edit(**fields)
+        return msg
             
 bot = BotWithReactions(command_prefix='-', description='PoE Info.')
 
@@ -918,7 +923,7 @@ def _create_pin_embed(pin):
     if thumb:
         e.set_thumbnail(url = thumb)
     if pin.attachments:
-        e.set_image(url = pin.attachments[0]['url'])
+        e.set_image(url = pin.attachments[0].url)
     e.set_author(
         name = pin.author.display_name,
         icon_url = pin.author.avatar_url,
