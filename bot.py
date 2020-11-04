@@ -158,9 +158,13 @@ class BotWithReactions(commands.Bot):
     async def on_reaction_add(self,reaction,user):
         if reaction.me and user!=self.user and user is not None:
             await self.process_reactions(reaction.message.id,reaction.emoji,new_author=user)
-    async def on_reaction_remove(self,reaction,user):
-        if reaction.me and user!=self.user and user is not None:
-            await self.process_reactions(reaction.message.id,reaction.emoji,new_author=user,remove=True)
+    # async def on_reaction_remove(self,reaction,user):
+        # if reaction.me and user!=self.user and user is not None:
+            # await self.process_reactions(reaction.message.id,reaction.emoji,new_author=user,remove=True)
+    # because on_reaction_remove does not register (message is not cached?)
+    async def on_raw_reaction_remove(self,payload):
+        if (payload.user_id is not None) and payload.user_id != self.user.id:
+            await self.process_reactions(payload.message_id,payload.emoji.name,new_author=self.get_user(payload.user_id),remove=True)
     async def on_message_edit(self,before,after):
         datediff = (datetime.datetime.utcnow() - before.created_at)
         if before.content!=after.content and datediff.days<1 and datediff.seconds<MESSAGE_EDITABLE_TIMEOUT: # need this check because auto-embed counts as editing
