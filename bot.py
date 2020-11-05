@@ -209,7 +209,10 @@ class BotWithReactions(commands.Bot):
         ''' for backwards compatibility '''
         cache_msg = discord.utils.get(self.cached_messages, id=msg.id)
         for r in [m for m in cache_msg.reactions if m.emoji==emo]:
-            await r.clear()
+            try:
+                await r.clear()
+            except discord.errors.Forbidden:
+                'missing permission to remove emojis'
     async def remove_reaction(self, msg, emo, user):
         ''' for backwards compatibility '''
         return await msg.remove_reaction(emo,user)
