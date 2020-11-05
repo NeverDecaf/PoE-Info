@@ -228,7 +228,11 @@ bot = BotWithReactions(command_prefix='-', description='PoE Info.')
 
 @bot.listen()
 async def on_guild_channel_pins_update(chan, last_pin):
-    pins = await bot.pins_from(chan)
+    try:
+        pins = await bot.pins_from(chan)
+    except (discord.errors.NotFound, discord.errors.Forbidden):
+        'missing permissions'
+        return
     if len(pins) >= DISCORD_PIN_LIMIT:
         r=bot.cursor.execute('SELECT dest FROM pins WHERE source=?',(chan.id,))
         dest = r.fetchone()
