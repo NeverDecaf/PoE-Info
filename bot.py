@@ -1060,6 +1060,7 @@ if __name__ =='__main__':
              timezone text DEFAULT "UTC")''')
     bot.conn.commit()
     import cogs
+    from cogs import *
     cogs.setup_all_cogs(bot)
     bot.add_cog(Alerts())
     bot.add_cog(Info())
