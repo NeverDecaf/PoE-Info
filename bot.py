@@ -94,6 +94,15 @@ class BotWithReactions(commands.Bot):
         if isinstance(args[0],discord.abc.GuildChannel) and not sent_msg.content == self.DEFAULT_FAILURE_MSG:
             await self.attach_button(sent_msg,author,self.DELETE_EMOJI,lambda x,y,z:self.delete_message(x))
         return sent_msg
+    async def make_deletable(self, msg, author):
+        '''
+        makes an existing message deletable (only by its original author)
+           
+        only works in public channels, not DMs
+        '''
+        if isinstance(msg.channel, discord.abc.GuildChannel) and not msg.content == self.DEFAULT_FAILURE_MSG:
+            await self.attach_button(msg,author,self.DELETE_EMOJI,lambda x,y,z:self.delete_message(x))
+        return msg
     async def attach_button(self, message, author, emoji, callback, *data, user_restricted=True, single_use=False, **kwargs):
         '''Add a reaction button. When pressed callback will be called with message,author,*data as arguments.'''
         try:
@@ -115,10 +124,14 @@ class BotWithReactions(commands.Bot):
             # this one means the message/reaction was deleted already so no big deal just ignore
             # Forbidden will occur if trying to delete other users emotes without permission
             pass
-    async def create_paged_embed(self,author,channel,pages,default_page):
+    async def create_paged_embed(self,author,channel,pages,default_page,edit_msg = None):
         #pages is a dict of emoji:embed
         # default_page is the key of the page that should be shown first
-        sent_msg = await self.send_deletable_message(author, channel, embed = pages[default_page])
+        if edit_msg:
+            sent_msg = edit_msg
+            await sent_msg.edit(embed = pages[default_page])
+        else:
+            sent_msg = await self.send_deletable_message(author, channel, embed = pages[default_page])
         self.EMBEDPAGES[sent_msg] = pages
         for emoji in pages.keys():
             await self.attach_button(sent_msg, author, emoji, self._swap_embed_page, emoji)
@@ -553,9 +566,11 @@ class Info(commands.Cog):
                 return
             if len(data)>1:
                 #send choices
-                sent_msg= await bot.send_message(ctx.message.channel, 'Multiple Results:\n'+'\n'.join(['%i. %s'%(i+1,datum['name']) for i,datum in enumerate(data)]))
+                e = _create_search_embed(data)
+                sent_msg= await bot.send_message(ctx.message.channel, embed = e)
                 for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
-                    await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, data[i], _create_unique_embed)#, _search_result, data[i][3])
+                    if not sent_msg.edited_at:
+                        await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, _create_unique_embed(data[i]))
                 return
             e = _create_unique_embed(data[0])
             await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
@@ -569,9 +584,11 @@ class Info(commands.Cog):
                 return
         if len(data)>1:
             #send choices
-            sent_msg= await bot.send_message(ctx.message.channel, 'Multiple Results:\n'+'\n'.join(['%i. %s'%(i+1,datum['name']) for i,datum in enumerate(data)]))
+            e = _create_search_embed(data)
+            sent_msg= await bot.send_message(ctx.message.channel, embed = e)
             for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
-                await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, data[i], _create_unique_embed)#, _search_result, data[i][3])
+                if not sent_msg.edited_at:
+                    await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, _create_unique_embed(data[i]))
             return
         e = _create_unique_embed(data[0])
         await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
@@ -615,13 +632,18 @@ class Info(commands.Cog):
             return
         if len(data)>1:
             #send choices
-            sent_msg= await bot.send_message(ctx.message.channel, 'Multiple Results:\n'+'\n'.join(['%i. %s'%(i+1,datum['name']) for i,datum in enumerate(data)]))
+            e = _create_search_embed(data)
+            sent_msg = await bot.send_message(ctx.message.channel, embed=e)
             for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
-                await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, data[i], _create_gem_embed)#, _search_result, data[i][3])
+                if not sent_msg.edited_at:
+                    await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], self._skill_internals, data[i], edit_msg = sent_msg)
             return
-        await self._skill_internals(ctx, data[0])
+        await self._skill_internals(ctx.message,ctx.message.author,False,data[0])
         
-    async def _skill_internals(self, ctx, data):
+    async def _skill_internals(self, msg, author, remove, data, edit_msg = None):
+        # msg isnt reliable, could be either the initial message or the response depending on context, use edit_msg instead
+        if edit_msg:
+            await edit_msg.clear_reactions()
         pages = {
         char_to_emoji('n'):_create_gem_embed(data,quality = Quality.NORMAL)
         }
@@ -630,11 +652,22 @@ class Info(commands.Cog):
         if data['qual_bonus_divergent']:
             pages[char_to_emoji('d')] = _create_gem_embed(data,quality = Quality.DIVERGENT)
         if len(pages)>1:
-            await bot.create_paged_embed(ctx.message.author, ctx.message.channel, pages, char_to_emoji('n'))
+            sent_msg = await bot.create_paged_embed(author, msg.channel, pages, char_to_emoji('n'), edit_msg = edit_msg)
         else:
-            await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=pages[char_to_emoji('n')])
+            if edit_msg:
+                await edit_msg.edit(embed = pages[char_to_emoji('n')])
+                sent_msg = edit_msg
+            else:
+                sent_msg = await bot.send_deletable_message(author, msg.channel, embed=pages[char_to_emoji('n')])
 
-        
+        await bot.make_deletable(sent_msg, author)
+        if edit_msg:
+            await asyncio.sleep(1)
+            cache_msg = await edit_msg.channel.fetch_message(edit_msg.id)
+            for react in cache_msg.reactions:
+                if react.emoji in DIGIT_EMOJI:
+                    await edit_msg.clear_reaction(react.emoji)
+         
     @commands.command(pass_context=True,aliases=['c'])
     async def currency(self, ctx, *currency_name: str):
         '''<name>
@@ -652,9 +685,11 @@ class Info(commands.Cog):
             return
         if len(data)>1:
             #send choices
-            sent_msg= await bot.send_message(ctx.message.channel, 'Multiple Results:\n'+'\n'.join(['%i. %s'%(i+1,datum['name']) for i,datum in enumerate(data)]))
+            e = _create_search_embed(data)
+            sent_msg= await bot.send_message(ctx.message.channel, embed = e)
             for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
-                await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, data[i], _create_currency_embed)#, _search_result, data[i][3])
+                if not sent_msg.edited_at:
+                    await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, _create_currency_embed(data[i]))
             return
         e = _create_currency_embed(data[0])
         await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
@@ -665,11 +700,18 @@ def _cache_labs():
             bot.cursor.execute('REPLACE INTO daily_labs (date,diff,img_url) VALUES (?,?,?)',(today,lab,url))
     bot.cursor.execute('DELETE FROM daily_labs WHERE date <> ?',(today,))
     bot.conn.commit()
-async def _search_result(msg, author, remove, data, _func):
-    e = _func(data)
-    await bot.send_deletable_message(author, msg.channel, embed=e)
-    await bot.delete_message(msg)
-    
+def _create_search_embed(data):
+    return discord.Embed(description='\n'.join(['%i. %s'%(i+1,datum['name']) for i,datum in enumerate(data)]))
+async def _search_result(edit_msg, author, remove, embed):
+    await edit_msg.clear_reactions()
+    await edit_msg.edit(embed = embed)
+    await bot.make_deletable(edit_msg, author)
+    await asyncio.sleep(1)
+    cache_msg = await edit_msg.channel.fetch_message(edit_msg.id)
+    for react in cache_msg.reactions:
+        if react.emoji in DIGIT_EMOJI:
+            await edit_msg.clear_reaction(react.emoji)
+ 
 @bot.command(pass_context=True,aliases=['nextrace','nextevent'])
 async def next(ctx):
     '''Displays the upcoming race.'''
