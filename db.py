@@ -73,7 +73,12 @@ class PoeDB:
         left join skill_quality q_d on {}.name=q_d.name AND q_d.q_type=3
         left join ninja_data on trim_variant({}.name)=ninja_data.name AND ninja_data.league=? COLLATE NOCASE WHERE {}.{} COLLATE NOCASE LIKE "%"||?||"%" {} GROUP BY {}.name ORDER BY MAX(chaosValue) LIMIT {}'''.format(tablename,tablename,tablename,tablename,tablename,tablename,'baseitem' if search_by_baseitem else 'name', 'AND drop_enabled' if league not in ('Standard','Hardcore') and tablename=='unique_items' else '', tablename, limit)
         res=self.cursor.execute(query,(league,searchname.lower(),))
-        return res.fetchall()
+        ret = res.fetchall()
+        if len(ret)>1:
+            for entry in ret:
+                if entry['name'].lower()==searchname.lower():
+                    return [entry]
+        return ret
 
     def unique_search_explicit(self,keywords,league,limit = 9):
         query = '''SELECT * FROM unique_items left join ninja_data on unique_items.name=ninja_data.name AND ninja_data.league=? COLLATE NOCASE WHERE unique_items.expl COLLATE NOCASE LIKE "%"||?||"%" COLLATE NOCASE '''
