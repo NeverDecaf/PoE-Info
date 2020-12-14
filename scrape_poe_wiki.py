@@ -83,7 +83,8 @@ def format_affixes(item_list):
                                         continue           # skip the rest of the loop because style variant was already added
 
                         else:
-                                print('Style variant expected but not found for: ' + item['name'] +'\nItem gets parsed as usual and added to the file, double check there.')
+                                pass
+                                # print('Style variant expected but not found for: ' + item['name'] +'\nItem gets parsed as usual and added to the file, double check there.')
                 
                 mod_line = item['name']
                 
@@ -160,6 +161,14 @@ SKILL_GEM_PROPERTY_MAPPING=dict(
         },
         **SKILL_GEM_VARIABLE_FIELDS)
 
+# cargo wiki field: local sqlitedb field
+SKILL_QUALITY_PROPERTY_MAPPING={
+                #skill_quality fields
+                'skill_quality._pageName':'name',
+                'skill_quality.set_id':'q_type',
+                'skill_quality.stat_text':'q_stat_text',
+                'skill_quality.weight':'q_weight',
+        }
 def scrape_skill_gems(limit=100000):
         query_limit = 500
         rowindex = 0
@@ -170,7 +179,6 @@ def scrape_skill_gems(limit=100000):
                 query = 'https://pathofexile.gamepedia.com/api.php?action=cargoquery&format=json&tables=skill_gems,skill,skill_levels&join_on=skill_gems._pageName=skill._pageName,skill_gems._pageName=skill_levels._pageName&fields='+\
                 ','.join(['='.join((k,v)) for k,v in SKILL_GEM_PROPERTY_MAPPING.items()])+',skill_gems._rowID=rowid,skill_levels.level=level&where=skill_gems._rowID>{} AND (skill_levels.level=skill.max_level OR skill_levels.level<2)&order_by=skill_gems._rowID&limit={}'.format(last_rowid+1,query_limit)
                 api_results = []
-##                print(query)
                 for i in range(3):
                         rj=None
                         try:
@@ -207,6 +215,44 @@ def scrape_skill_gems(limit=100000):
                 time.sleep(3)
         return keyed_results.values()
 
+def scrape_skill_quality(limit=50000):
+        full_results=[]
+        rowindex = 0
+        query_limit = 500
+        last_rowid = -1 # adds 1 to this.
+        while rowindex<limit:
+                query = 'https://pathofexile.gamepedia.com/api.php?action=cargoquery&format=json&tables=skill_quality'+\
+                        '&fields='+','.join(['='.join((k,v)) for k,v in SKILL_QUALITY_PROPERTY_MAPPING.items()])+',skill_quality._rowID=rowid&where=skill_quality._rowID>{} &order_by=skill_quality._rowID&limit={}'.format(last_rowid+1,query_limit)
+                # need to fetch in batches of 500 (the limit for one query)
+                # we will use _rowID to do this, continue querying until we get 0 results
+                # this isnt 100% safe but it should work unless someone does something to really break the db.
+                # we have fixed this maybe with 'expected_items', see above.
+                api_results = []
+                for i in range(3):
+                        rj=None
+                        try:
+                                r = requests.get(query)
+                                r.encoding = 'utf-8'
+                                rj = r.json()
+                                api_results = [a['title'] for a in rj['cargoquery']]
+                                break
+                        except:
+                                time.sleep(4)
+                                #error, trying again.
+##                print('currently at',len(full_results),'/',expected_items,'items. row#:',rowindex)
+                if not len(api_results): # and len(full_results)>=expected_items:
+                        break
+                for res in api_results:
+                        last_rowid = int(res['rowid'])
+                        res.pop('rowid',None)
+                        # res['impl'] = remove_wiki_formats(html.unescape(res['impl']))
+                        # res['expl'] = remove_wiki_formats(html.unescape(res['expl']))#.replace('<br>','\n')
+                full_results.extend(api_results)
+                rowindex+=query_limit
+                time.sleep(3)
+        # need to call remove_wiki_formats on impl and expl and we should be good2go
+##        print('total unique_item results:',len(full_results))
+        return full_results
 UNIQUE_ITEM_PROPERTY_MAPPING={
         'items._pageName':'name',
         'items.implicit_stat_text':'impl',
@@ -441,6 +487,6 @@ def get_lab_urls(date):
     return ret
 if __name__ == '__main__':
     # print(get_ninja_rates())
-    import datetime
-    print(get_lab_urls(datetime.datetime.utcnow().strftime('%Y-%m-%d')))
-    
+    # import datetime
+    # print(get_lab_urls(datetime.datetime.utcnow().strftime('%Y-%m-%d')))
+    print(scrape_skill_quality())

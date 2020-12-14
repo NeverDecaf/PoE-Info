@@ -37,6 +37,9 @@ class PoeDB:
         levelmax_field_names = scrape_poe_wiki.SKILL_GEM_VARIABLE_FIELDS.values()
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS skill_gems
                  (thumbnail_url text, {}, {}, PRIMARY KEY (name))'''.format(','.join([name+' text' for name in field_names]),','.join([name+'_max text' for name in levelmax_field_names])))
+        field_names = scrape_poe_wiki.SKILL_QUALITY_PROPERTY_MAPPING.values()
+        self.cursor.execute('''CREATE TABLE IF NOT EXISTS skill_quality
+                 ({}, PRIMARY KEY (name,q_type))'''.format(','.join([name+' text' for name in field_names])))
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS event_times
                  (id text primary key, startAt timestamp, endAt timestamp, url text)''')
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS ninja_data
@@ -64,7 +67,11 @@ class PoeDB:
         self.conn.commit()
         
     def get_data(self,tablename,searchname,league,limit = 9, search_by_baseitem = False):
-        query = '''SELECT * FROM {} left join ninja_data on trim_variant({}.name)=ninja_data.name AND ninja_data.league=? COLLATE NOCASE WHERE {}.{} COLLATE NOCASE LIKE "%"||?||"%" {} GROUP BY {}.name ORDER BY MAX(chaosValue) LIMIT {}'''.format(tablename,tablename,tablename,'baseitem' if search_by_baseitem else 'name', 'AND drop_enabled' if league not in ('Standard','Hardcore') and tablename=='unique_items' else '', tablename, limit)
+        query = '''SELECT *,q_n.q_stat_text as qual_bonus_normal,q_a.q_stat_text as qual_bonus_anomalous,q_d.q_stat_text as qual_bonus_divergent FROM {} 
+        left join skill_quality q_n on {}.name=q_n.name AND q_n.q_type=1
+        left join skill_quality q_a on {}.name=q_a.name AND q_a.q_type=2
+        left join skill_quality q_d on {}.name=q_d.name AND q_d.q_type=3
+        left join ninja_data on trim_variant({}.name)=ninja_data.name AND ninja_data.league=? COLLATE NOCASE WHERE {}.{} COLLATE NOCASE LIKE "%"||?||"%" {} GROUP BY {}.name ORDER BY MAX(chaosValue) LIMIT {}'''.format(tablename,tablename,tablename,tablename,tablename,tablename,'baseitem' if search_by_baseitem else 'name', 'AND drop_enabled' if league not in ('Standard','Hardcore') and tablename=='unique_items' else '', tablename, limit)
         res=self.cursor.execute(query,(league,searchname.lower(),))
         return res.fetchall()
 
@@ -172,6 +179,8 @@ if __name__=='__main__':
         a.add_items_async(scrape_poe_wiki.format_affixes(scrape_poe_wiki.scrape_unique_items()))
         #scrape skill gems
         a.add_items_async(scrape_poe_wiki.scrape_skill_gems(),'skill_gems')
+        #scrape skill quality
+        a.add_items_async(scrape_poe_wiki.scrape_skill_quality(),'skill_quality')
         #scape events (RIP)
         a._scrape_events()
     # get poe.ninja data (mainly for price)
