@@ -21,6 +21,7 @@ import dateparser
 from dateparser.search import search_dates
 from urllib.parse import quote as urlquote
 from scrape_poe_wiki import get_lab_urls
+from enum import Enum
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
@@ -37,10 +38,17 @@ DIGIT_EMOJI = ['\U00000031\U000020E3',
                 '\U00000037\U000020E3',
                 '\U00000038\U000020E3',
                 '\U00000039\U000020E3']
+def char_to_emoji(letter):
+    return chr(127365 + ord(letter.lower()))
+class Quality(Enum):
+    NORMAL = 1
+    ANOMALOUS = 2
+    DIVERGENT = 3
 class BotWithReactions(commands.Bot):
     DELETE_EMOJI = '\U0000274C'
     REACTION_TIMEOUT = 60*60*12 # seconds (was 300)
     REACTIONBUTTONS={}
+    EMBEDPAGES = {}
     CLEANUP_TIMEOUT = 60 # seconds
     AUTO_CLEANUP = OrderedDict()
     CLEANUP_KEY = 0
@@ -94,7 +102,7 @@ class BotWithReactions(commands.Bot):
                 await message.add_reaction(emoji)
             if not user_restricted:
                 author = None
-            self.REACTIONBUTTONS[key]=(time.time(),callback,message,single_use,author,*data,kwargs)
+            self.REACTIONBUTTONS[key]=(time.time(),callback,message,single_use,author,data,kwargs)
         except discord.errors.NotFound:
             pass # this one means the message/reaction was deleted already so no big deal just ignore
     async def remove_button(self, msg, emoji):
@@ -107,6 +115,18 @@ class BotWithReactions(commands.Bot):
             # this one means the message/reaction was deleted already so no big deal just ignore
             # Forbidden will occur if trying to delete other users emotes without permission
             pass
+    async def create_paged_embed(self,author,channel,pages,default_page):
+        #pages is a dict of emoji:embed
+        # default_page is the key of the page that should be shown first
+        sent_msg = await self.send_deletable_message(author, channel, embed = pages[default_page])
+        self.EMBEDPAGES[sent_msg] = pages
+        for emoji in pages.keys():
+            await self.attach_button(sent_msg, author, emoji, self._swap_embed_page, emoji)
+        return sent_msg
+    async def _swap_embed_page(self, msg, author, remove, key):
+        await msg.edit(embed=self.EMBEDPAGES[msg][key])
+        return
+        
     async def auto_cleanup(self):
         now = time.time()
         while len(self.AUTO_CLEANUP):
@@ -128,7 +148,7 @@ class BotWithReactions(commands.Bot):
         key = (message_id, emoji)
         if key in self.REACTIONBUTTONS:
             emoji = key[1]
-            _,callback,msg,single_use,author,*data,kwargs=self.REACTIONBUTTONS[key]
+            _,callback,msg,single_use,author,data,kwargs=self.REACTIONBUTTONS[key]
             if author != None and author != new_author:
                 return
             if single_use:
@@ -154,6 +174,15 @@ class BotWithReactions(commands.Bot):
                     await self.remove_all_reactions(msg,emoji)
                 except discord.errors.NotFound:
                     pass # this one means the message/reaction was deleted already so no big deal just ignore
+        for msg in list(self.EMBEDPAGES.keys()):
+            datediff = (datetime.datetime.utcnow() - msg.created_at)
+            if datediff.days*24*60*60 + datediff.seconds > self.REACTION_TIMEOUT:
+                pages = self.EMBEDPAGES.pop(msg,[])
+                for emoji in pages:
+                    try:
+                        await self.remove_all_reactions(msg,emoji)
+                    except discord.errors.NotFound:
+                        pass # this one means the message/reaction was deleted already so no big deal just ignore
 
     async def on_reaction_add(self,reaction,user):
         if reaction.me and user!=self.user and user is not None:
@@ -167,7 +196,7 @@ class BotWithReactions(commands.Bot):
             await self.process_reactions(payload.message_id,payload.emoji.name,new_author=self.get_user(payload.user_id),remove=True)
     async def on_message_edit(self,before,after):
         datediff = (datetime.datetime.utcnow() - before.created_at)
-        if before.content!=after.content and datediff.days<1 and datediff.seconds<MESSAGE_EDITABLE_TIMEOUT: # need this check because auto-embed counts as editing
+        if before.content!=after.content and datediff.days*24*60*60+datediff.seconds<MESSAGE_EDITABLE_TIMEOUT: # need this check because auto-embed counts as editing
             await self.process_commands(after)
             try:
                 await self.edited_cleanup(after) # this can error due to race condition
@@ -590,8 +619,21 @@ class Info(commands.Cog):
             for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
                 await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, data[i], _create_gem_embed)#, _search_result, data[i][3])
             return
-        e = _create_gem_embed(data[0])
-        await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
+        await self._skill_internals(ctx, data[0])
+        
+    async def _skill_internals(self, ctx, data):
+        pages = {
+        char_to_emoji('n'):_create_gem_embed(data,quality = Quality.NORMAL)
+        }
+        if data['qual_bonus_anomalous']:
+            pages[char_to_emoji('a')] = _create_gem_embed(data,quality = Quality.ANOMALOUS)
+        if data['qual_bonus_divergent']:
+            pages[char_to_emoji('d')] = _create_gem_embed(data,quality = Quality.DIVERGENT)
+        if len(pages)>1:
+            await bot.create_paged_embed(ctx.message.author, ctx.message.channel, pages, char_to_emoji('n'))
+        else:
+            await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=pages[char_to_emoji('n')])
+
         
     @commands.command(pass_context=True,aliases=['c'])
     async def currency(self, ctx, *currency_name: str):
@@ -720,7 +762,7 @@ def _create_unique_embed(data):
         e.set_footer(text=s)
     return e
 
-def _create_gem_embed(data):
+def _create_gem_embed(data, quality=Quality.NORMAL):
     def if_not_zero(val,label):
         if val:
             return label+' '+val+'\n'
@@ -811,9 +853,16 @@ def _create_gem_embed(data):
 
     if 'icon' in data.keys() and data['icon']:
         e.set_thumbnail(url=data['icon'].replace(' ','%20'))
-        
-    if data['qual_bonus_normal'] and data['stat_text']:
-        e.add_field(name='Per 1% Quality:',value=bold_nums.sub(r'**\1**', '{}\n\n{}'.format(data['qual_bonus_normal'],data['stat_text']).replace('<br>','\n')).replace('****',''),inline=False)
+    if data['stat_text']:
+        qual_bonus = None
+        if quality==Quality.NORMAL and data['qual_bonus_normal']:
+            qual_bonus = data['qual_bonus_normal']
+        if quality==Quality.ANOMALOUS and data['qual_bonus_anomalous']:
+            qual_bonus = data['qual_bonus_anomalous']
+        if quality==Quality.DIVERGENT and data['qual_bonus_divergent']:
+            qual_bonus = data['qual_bonus_divergent']
+        if qual_bonus:
+            e.add_field(name='Per 1% Quality:',value=bold_nums.sub(r'**\1**', '{}\n\n{}'.format(qual_bonus,data['stat_text']).replace('<br>','\n')).replace('****',''),inline=False)
         
     if not data['primary_att'].lower() == 'none':
         e.set_footer(text=data['primary_att'])
