@@ -252,7 +252,10 @@ class BotWithReactions(commands.Bot):
         cache_msg = discord.utils.get(self.cached_messages, id=msg.id)
         for r in [m for m in cache_msg.reactions if m.emoji==emo]:
             try:
-                await r.clear()
+                try:
+                    await r.clear()
+                except:
+                    await r.remove(self.user)
             except discord.errors.Forbidden:
                 'missing permission to remove emojis'
     async def remove_reaction(self, msg, emo, user):
@@ -642,7 +645,7 @@ class Info(commands.Cog):
         
     async def _skill_internals(self, msg, author, remove, data, edit_msg = None):
         # msg isnt reliable, could be either the initial message or the response depending on context, use edit_msg instead
-        if edit_msg:
+        if edit_msg and isinstance(edit_msg.channel,discord.abc.GuildChannel):
             await edit_msg.clear_reactions()
         pages = {
         char_to_emoji('n'):_create_gem_embed(data,quality = Quality.NORMAL)
@@ -666,7 +669,7 @@ class Info(commands.Cog):
             cache_msg = await edit_msg.channel.fetch_message(edit_msg.id)
             for react in cache_msg.reactions:
                 if react.emoji in DIGIT_EMOJI:
-                    await edit_msg.clear_reaction(react.emoji)
+                    await bot.remove_button(edit_msg, react.emoji)
          
     @commands.command(pass_context=True,aliases=['c'])
     async def currency(self, ctx, *currency_name: str):
@@ -703,14 +706,15 @@ def _cache_labs():
 def _create_search_embed(data):
     return discord.Embed(description='\n'.join(['%i. %s'%(i+1,datum['name']) for i,datum in enumerate(data)]))
 async def _search_result(edit_msg, author, remove, embed):
-    await edit_msg.clear_reactions()
+    if isinstance(edit_msg.channel,discord.abc.GuildChannel):
+        await edit_msg.clear_reactions()
     await edit_msg.edit(embed = embed)
     await bot.make_deletable(edit_msg, author)
     await asyncio.sleep(1)
     cache_msg = await edit_msg.channel.fetch_message(edit_msg.id)
     for react in cache_msg.reactions:
         if react.emoji in DIGIT_EMOJI:
-            await edit_msg.clear_reaction(react.emoji)
+            await bot.remove_button(edit_msg, react.emoji)
  
 @bot.command(pass_context=True,aliases=['nextrace','nextevent'])
 async def next(ctx):
