@@ -798,7 +798,14 @@ def _create_unique_embed(data):
     elif 'image_url' in data.keys() and data['image_url']:
         e.set_thumbnail(url='https://pathofexile.gamepedia.com/Special:Redirect/file/{}'.format(urlquote(data['image_url'])))
     if data['impl'] or data['expl']: #this is only for tabula
-        e.add_field(name=(_strip_html_tags(bold_nums.sub(r'**\1**', str(data['impl']))) or '--').replace('****',''),value=(_strip_html_tags(bold_nums.sub(r'**\1**', str(data['expl']))) or '--').replace('****',''),inline=False)
+        header = re.compile('<th[^>]*>(.*?)<\/th>',re.DOTALL)
+        expl_mods = str(data['expl'])
+        table_header = header.search(expl_mods)
+        if table_header:
+            expl_text = '{}'.format(table_header.group(1))
+        else:
+            expl_text = (_strip_html_tags(bold_nums.sub(r'**\1**', expl_mods)) or '--')
+        e.add_field(name=(_strip_html_tags(bold_nums.sub(r'**\1**', str(data['impl']))) or '--').replace('****',''),value=expl_text.replace('****',''),inline=False)
     if data['physdps'] or data['eledps']:
         s=''
         if data['physdps']:
