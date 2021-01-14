@@ -664,6 +664,8 @@ class Info(commands.Cog):
         for k,v in QUAL_TO_DB_COL_NAME.items():
             if data[v]:
                 pages[QUAL_TO_EMOJI[k]] = _create_gem_embed(data,quality = k)
+        if QUAL_TO_EMOJI[Quality.NORMAL] not in pages:
+            pages[QUAL_TO_EMOJI[Quality.NORMAL]] = _create_gem_embed(data)
         if len(pages)>1:
             sent_msg = await bot.create_paged_embed(author, msg.channel, pages, QUAL_TO_EMOJI[Quality.NORMAL], edit_msg = edit_msg)
         else:
@@ -918,7 +920,8 @@ def _create_gem_embed(data, quality=Quality.NORMAL):
         e.set_thumbnail(url=data['icon'].replace(' ','%20'))
     if data['stat_text']:
         qual_bonus = data[QUAL_TO_DB_COL_NAME[quality]]
-        e.add_field(name='Per 1% Quality:',value=bold_nums.sub(r'**\1**', '{}\n\n{}'.format(qual_bonus,data['stat_text']).replace('<br>','\n')).replace('****',''),inline=False)
+        if qual_bonus:
+            e.add_field(name='Per 1% Quality:',value=bold_nums.sub(r'**\1**', '{}\n\n{}'.format(qual_bonus,data['stat_text']).replace('<br>','\n')).replace('****',''),inline=False)
 
     if not data['primary_att'].lower() == 'none':
         e.set_footer(text=data['primary_att'])
