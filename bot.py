@@ -44,6 +44,19 @@ class Quality(Enum):
     NORMAL = 1
     ANOMALOUS = 2
     DIVERGENT = 3
+    PHANTASMAL = 4
+QUAL_TO_DB_COL_NAME = {
+    Quality.NORMAL : 'qual_bonus_normal',
+    Quality.ANOMALOUS : 'qual_bonus_anomalous',
+    Quality.DIVERGENT : 'qual_bonus_divergent',
+    Quality.PHANTASMAL : 'qual_bonus_phantasmal'
+    }
+QUAL_TO_EMOJI = {
+    Quality.NORMAL : char_to_emoji('n'),
+    Quality.ANOMALOUS : char_to_emoji('a'),
+    Quality.DIVERGENT : char_to_emoji('d'),
+    Quality.PHANTASMAL : char_to_emoji('p')
+    }
 class BotWithReactions(commands.Bot):
     DELETE_EMOJI = '\U0000274C'
     REACTION_TIMEOUT = 60*60*12 # seconds (was 300)
@@ -647,21 +660,18 @@ class Info(commands.Cog):
         # msg isnt reliable, could be either the initial message or the response depending on context, use edit_msg instead
         if edit_msg and isinstance(edit_msg.channel,discord.abc.GuildChannel):
             await edit_msg.clear_reactions()
-        pages = {
-        char_to_emoji('n'):_create_gem_embed(data,quality = Quality.NORMAL)
-        }
-        if data['qual_bonus_anomalous']:
-            pages[char_to_emoji('a')] = _create_gem_embed(data,quality = Quality.ANOMALOUS)
-        if data['qual_bonus_divergent']:
-            pages[char_to_emoji('d')] = _create_gem_embed(data,quality = Quality.DIVERGENT)
+        pages = {}
+        for k,v in QUAL_TO_DB_COL_NAME.items():
+            if data[v]:
+                pages[QUAL_TO_EMOJI[k]] = _create_gem_embed(data,quality = k)
         if len(pages)>1:
-            sent_msg = await bot.create_paged_embed(author, msg.channel, pages, char_to_emoji('n'), edit_msg = edit_msg)
+            sent_msg = await bot.create_paged_embed(author, msg.channel, pages, QUAL_TO_EMOJI[Quality.NORMAL], edit_msg = edit_msg)
         else:
             if edit_msg:
-                await edit_msg.edit(embed = pages[char_to_emoji('n')])
+                await edit_msg.edit(embed = pages[QUAL_TO_EMOJI[Quality.NORMAL]])
                 sent_msg = edit_msg
             else:
-                sent_msg = await bot.send_deletable_message(author, msg.channel, embed=pages[char_to_emoji('n')])
+                sent_msg = await bot.send_deletable_message(author, msg.channel, embed=pages[QUAL_TO_EMOJI[Quality.NORMAL]])
 
         await bot.make_deletable(sent_msg, author)
         if edit_msg:
@@ -907,16 +917,9 @@ def _create_gem_embed(data, quality=Quality.NORMAL):
     if 'icon' in data.keys() and data['icon']:
         e.set_thumbnail(url=data['icon'].replace(' ','%20'))
     if data['stat_text']:
-        qual_bonus = None
-        if quality==Quality.NORMAL and data['qual_bonus_normal']:
-            qual_bonus = data['qual_bonus_normal']
-        if quality==Quality.ANOMALOUS and data['qual_bonus_anomalous']:
-            qual_bonus = data['qual_bonus_anomalous']
-        if quality==Quality.DIVERGENT and data['qual_bonus_divergent']:
-            qual_bonus = data['qual_bonus_divergent']
-        if qual_bonus:
-            e.add_field(name='Per 1% Quality:',value=bold_nums.sub(r'**\1**', '{}\n\n{}'.format(qual_bonus,data['stat_text']).replace('<br>','\n')).replace('****',''),inline=False)
-        
+        qual_bonus = data[QUAL_TO_DB_COL_NAME[quality]]
+        e.add_field(name='Per 1% Quality:',value=bold_nums.sub(r'**\1**', '{}\n\n{}'.format(qual_bonus,data['stat_text']).replace('<br>','\n')).replace('****',''),inline=False)
+
     if not data['primary_att'].lower() == 'none':
         e.set_footer(text=data['primary_att'])
     else:

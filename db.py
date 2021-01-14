@@ -67,11 +67,12 @@ class PoeDB:
         self.conn.commit()
         
     def get_data(self,tablename,searchname,league,limit = 9, search_by_baseitem = False):
-        query = '''SELECT *,q_n.q_stat_text as qual_bonus_normal,q_a.q_stat_text as qual_bonus_anomalous,q_d.q_stat_text as qual_bonus_divergent FROM {} 
+        query = '''SELECT *,q_n.q_stat_text as qual_bonus_normal,q_a.q_stat_text as qual_bonus_anomalous,q_d.q_stat_text as qual_bonus_divergent,q_p.q_stat_text as qual_bonus_phantasmal FROM {} 
         left join skill_quality q_n on {}.name=q_n.name AND q_n.q_type=1
         left join skill_quality q_a on {}.name=q_a.name AND q_a.q_type=2
         left join skill_quality q_d on {}.name=q_d.name AND q_d.q_type=3
-        left join ninja_data on trim_variant({}.name)=ninja_data.name AND ninja_data.league=? COLLATE NOCASE WHERE {}.{} COLLATE NOCASE LIKE "%"||?||"%" {} GROUP BY {}.name ORDER BY MAX(chaosValue) LIMIT {}'''.format(tablename,tablename,tablename,tablename,tablename,tablename,'baseitem' if search_by_baseitem else 'name', 'AND drop_enabled' if league not in ('Standard','Hardcore') and tablename=='unique_items' else '', tablename, limit)
+        left join skill_quality q_p on {}.name=q_p.name AND q_p.q_type=4
+        left join ninja_data on trim_variant({}.name)=ninja_data.name AND ninja_data.league=? COLLATE NOCASE WHERE {}.{} COLLATE NOCASE LIKE "%"||?||"%" {} GROUP BY {}.name ORDER BY MAX(chaosValue) LIMIT {}'''.format(tablename,tablename,tablename,tablename,tablename,tablename,tablename,'baseitem' if search_by_baseitem else 'name', 'AND drop_enabled' if league not in ('Standard','Hardcore') and tablename=='unique_items' else '', tablename, limit)
         res=self.cursor.execute(query,(league,searchname.lower(),))
         ret = res.fetchall()
         if len(ret)>1:
