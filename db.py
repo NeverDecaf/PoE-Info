@@ -6,6 +6,7 @@ import json
 import html
 import time
 import os
+import cloudscraper
 
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
@@ -17,6 +18,7 @@ class PoeDB:
         self.db=dbfile
         self._connect(ro)
         self._create_tables()
+        self.scraper = cloudscraper.create_scraper()
     
     def _connect(self, ro):
         if ro:
@@ -103,8 +105,11 @@ class PoeDB:
         return r.fetchall()
     
     def _scrape_events(self):
-        data = requests.get('http://api.pathofexile.com/leagues?type=event&compact=1')
-        js=json.loads(data.text)
+        data = self.scraper.get('http://api.pathofexile.com/leagues?type=event&compact=1')
+        try:
+            js = data.json()
+        except json.decoder.JSONDecodeError:
+            js = {}
         if len(js):
             self.cursor.execute('''DELETE FROM event_times''')
         for event in js:
@@ -175,6 +180,8 @@ if __name__=='__main__':
     import datetime
     
     a = PoeDB()
+    a._scrape_events()
+    exit()
     print(datetime.datetime.now())
     if len(sys.argv)>1 and sys.argv[1]=='-r':
         a.reset()
