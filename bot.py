@@ -22,6 +22,7 @@ from dateparser.search import search_dates
 from urllib.parse import quote as urlquote
 from scrape_poe_wiki import get_lab_urls
 from enum import Enum
+import cloudscraper
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
@@ -929,11 +930,16 @@ def _create_gem_embed(data, quality=Quality.NORMAL):
         e.set_footer(text='Colorless')
     return e
 
+def cloudscraper_get(url):
+    with cloudscraper.create_scraper() as s:
+        return s.get(url)
+
 # will return a list of embeds for all "unread" announcements
 # returns tuples of (embed, filterable text or None)
 async def scrape_forum(section = 'https://www.pathofexile.com/forum/view-forum/news', table = 'forum_announcements', header = 'Forum - Announcements'):
+    MAX_SIMUL_ANNOUNCEMENTS = 3 # to prevent spamming if the bot/forums are down.
     loop = asyncio.get_event_loop() # could also use bot.loop or whatever it is
-    future = loop.run_in_executor(None, requests.get, section)
+    future = loop.run_in_executor(None, cloudscraper_get, section)
     data = await future
     etree = lxmlhtml.fromstring(data.text)
     titles = [a.strip() for a in etree.xpath('//div[@class="title"]/a/text()')]
@@ -952,7 +958,7 @@ async def scrape_forum(section = 'https://www.pathofexile.com/forum/view-forum/n
         try:
             if table == 'forum_announcements':
                 loop = asyncio.get_event_loop()
-                future = loop.run_in_executor(None, requests.get, thread[1])
+                future = loop.run_in_executor(None, cloudscraper_get, thread[1])
                 data = await future
 
                 if data.status_code == 200:
@@ -967,7 +973,9 @@ async def scrape_forum(section = 'https://www.pathofexile.com/forum/view-forum/n
             #announce.
             bot.cursor.execute('INSERT INTO %s (title,url,threadnum) VALUES (?,?,?)'%table,thread)
             bot.conn.commit()
-            announces.append((_create_forum_embed(thread[1],thread[0],header,img=embed_img),None))
+            if MAX_SIMUL_ANNOUNCEMENTS > 0:
+                announces.append((_create_forum_embed(thread[1],thread[0],header,img=embed_img),None))
+                MAX_SIMUL_ANNOUNCEMENTS -= 1
     return announces
 
 # returns tuples of (embed, filterable text or None)
@@ -976,7 +984,7 @@ async def scrape_deals(deal_api = 'https://www.pathofexile.com/api/shop/microtra
 ##    if r.fetchone(): #ongoing deal, no need to check for new ones.
 ##        return None
     loop = asyncio.get_event_loop() # could also use bot.loop or whatever it is
-    future = loop.run_in_executor(None, requests.get, deal_api)
+    future = loop.run_in_executor(None, cloudscraper_get, deal_api)
     data = await future
     data.raise_for_status()
     js = data.json()
