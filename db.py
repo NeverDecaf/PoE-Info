@@ -182,7 +182,6 @@ if __name__=='__main__':
     
     a = PoeDB()
     a._scrape_events()
-    exit()
     print(datetime.datetime.now())
     if len(sys.argv)>1 and sys.argv[1]=='-r':
         a.reset()
