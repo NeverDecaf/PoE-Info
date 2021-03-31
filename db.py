@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import scrape_poe_wiki
 import sqlite3
 import requests
@@ -205,6 +206,3 @@ if __name__=='__main__':
         if data:
             a.add_items_async(data,'ninja_currency_data')
     a.close()
-
-
-
