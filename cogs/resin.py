@@ -90,10 +90,10 @@ class GenshinTools(commands.Cog, name='Genshin Tools'):
                 if js['retcode'] == 0:
                     wishlist = js['data']['list']
                     for wish in wishlist:
-                        if pity4 == None and wish['rank_type'] == '4':
+                        if pity4 == None and int(wish['rank_type']) in (4,5):
                             pity4 = wishcount
                             name4 = wish['name']
-                        if pity5 == None and wish['rank_type'] == '5':
+                        if pity5 == None and int(wish['rank_type']) == 5:
                             pity5 = wishcount
                             name5 = wish['name']
                         wishcount += 1
