@@ -285,6 +285,9 @@ class BotWithReactions(commands.Bot):
         ''' for backwards compatibility '''
         await msg.edit(**fields)
         return msg
+    async def on_command_error(self, ctx, err):
+        if isinstance(err, commands.errors.MissingRequiredArgument):
+            await ctx.send_help(ctx.invoked_with)
             
 bot = BotWithReactions(command_prefix='-', description='PoE Info.')
 
