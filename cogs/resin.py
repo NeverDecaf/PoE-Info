@@ -90,7 +90,7 @@ class GenshinTools(commands.Cog, name='Genshin Tools'):
                 if js['retcode'] == 0:
                     wishlist = js['data']['list']
                     for wish in wishlist:
-                        if pity4 == None and int(wish['rank_type']) in (4,5):
+                        if pity4 == None and int(wish['rank_type']) == 4:
                             pity4 = wishcount
                             name4 = wish['name']
                         if pity5 == None and int(wish['rank_type']) == 5:
@@ -111,8 +111,8 @@ class GenshinTools(commands.Cog, name='Genshin Tools'):
         if pity5 == None:
             pity5 = wishcount
         e = Embed(title = 'Pity Counter')
-        e.add_field(name = f'Last 4*: {name4}', value = f'{10 - pity4} Pulls until next pity ({pity4} pulls in)')
-        e.add_field(name = f'Last 5*: {name5}', value = f'{90 - pity5} Pulls until next pity ({pity5} pulls in)')
+        e.add_field(name = f'Last 4*: {name4}', value = f'{10 - pity4} Pull{"" if pity4==9 else "s"} until next pity ({pity4} pull{"" if pity4==1 else "s"} in)')
+        e.add_field(name = f'Last 5*: {name5}', value = f'{90 - pity5} Pull{"" if pity5==89 else "s"} until next pity ({pity5} pull{"" if pity5==1 else "s"} in)')
         return e
         
     @commands.command()
