@@ -393,6 +393,8 @@ reminder timezone <tz> - set timezone for date reminders'''
     disp_settings = {'TO_TIMEZONE':(r and r[0]) or 'UTC', 'TIMEZONE':'UTC', 'PREFER_DATES_FROM': 'future'}
     def parse_reminder_time(txt):
         dates = search_dates(txt, settings = settings)
+        if dates == None:
+            return None,None
         for datestr,dt in dates:
             if txt.startswith(datestr):
                 msg = txt[len(datestr):].lstrip()
@@ -446,7 +448,7 @@ reminder timezone <tz> - set timezone for date reminders'''
     elif len(args)>1:
         date,msg = parse_reminder_time(fulltext)
         if not date:
-            await bot.send_message(ctx.message.channel, helpmsg)
+            await bot.send_message(ctx.message.channel, 'Could not find a time or date in your message, try being more specific. For example, use "in 10 days" instead of "10 days" or "5 minutes" instead of "5m".')
             return
         if date.tzinfo:
             await bot.send_message(ctx.message.channel, 'timezone argument not (currently) supported, set global timezone for this server with -reminder timezone <tz>')
