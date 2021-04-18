@@ -13,12 +13,9 @@ import requests
 import urllib.parse as urlparse
 from lxml import html as lxmlhtml
 import datetime
-import io,shutil # for copying pins
 import json,hashlib # for daily deal
 from fractions import Fraction
 import math
-import dateparser
-from dateparser.search import search_dates
 from urllib.parse import quote as urlquote
 from scrape_poe_wiki import get_lab_urls
 from enum import Enum
@@ -26,7 +23,7 @@ import cloudscraper
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
-DISCORD_PIN_LIMIT = 50
+
 MESSAGE_EDITABLE_TIMEOUT = 60*60*24 # seconds, max of 1 day.
 PRIVATE_CHANNEL = discord.ChannelType.private
 SEARCH_REACTION_LIMIT = 9 # max digit emojis to show.
@@ -256,7 +253,19 @@ class BotWithReactions(commands.Bot):
     @cleanup_reactions.before_loop
     async def before_run(self):
         await self.wait_until_ready()
-    
+        
+    async def on_command_error(self, ctx, err):
+        if isinstance(err, (commands.errors.MissingRequiredArgument, commands.BadArgument)):
+            await ctx.send_help(ctx.invoked_with)
+        elif isinstance(err, commands.errors.MissingPermissions):
+            await self.send_failure_message(ctx.message.channel, '```You must be an administrator to use this command.```')
+        elif isinstance(err, commands.errors.NoPrivateMessage):
+            await self.send_failure_message(ctx.message.channel, '```This command cannot be used in direct messages.```')
+        elif isinstance(err, commands.errors.CommandNotFound):
+            pass
+        else:
+            print('%r'%err)
+            
     # compatibility funcs for discord 0.9
     async def delete_message(self, msg):
         ''' for backwards compatibility '''
@@ -285,26 +294,14 @@ class BotWithReactions(commands.Bot):
         ''' for backwards compatibility '''
         await msg.edit(**fields)
         return msg
-    async def on_command_error(self, ctx, err):
-        if isinstance(err, commands.errors.MissingRequiredArgument):
-            await ctx.send_help(ctx.invoked_with)
             
+def admin_or_dm():
+    async def predicate(ctx):
+        if ctx.message.channel.type == PRIVATE_CHANNEL or ctx.message.author.permissions_in(ctx.message.channel).administrator:
+            return True
+        raise commands.MissingPermissions('Administrator')
+    return commands.check(predicate)
 bot = BotWithReactions(command_prefix='-', description='PoE Info.')
-
-@bot.listen()
-async def on_guild_channel_pins_update(chan, last_pin):
-    try:
-        pins = await bot.pins_from(chan)
-    except (discord.errors.NotFound, discord.errors.Forbidden):
-        'missing permissions'
-        return
-    if len(pins) >= DISCORD_PIN_LIMIT:
-        r=bot.cursor.execute('SELECT dest FROM pins WHERE source=?',(chan.id,))
-        dest = r.fetchone()
-        if dest:
-            pin_channel=bot.get_channel(dest[0])
-            if pin_channel and _pin_perm_check(chan.guild, chan, pin_channel):
-                await _move_pins(pins[-1:], pin_channel)
 
 @bot.listen()
 async def on_ready():
@@ -312,160 +309,12 @@ async def on_ready():
     print(bot.user.name)
     print(bot.user.id)
     print('------')
-    
-@bot.command(pass_context=True)
-async def pin(ctx, *count : str):
-    '''<count>|<set>
-Number of pins to move OR set a channel for pins.'''
-    if not ctx.message.author.permissions_in(ctx.message.channel).administrator:
-        await bot.send_message(ctx.message.channel, 'You must be an administrator to use this command.')
-        return
-    if len(count)>1 and count[0] == 'set':
-        # set pin channel
-        if not ctx.message.author.permissions_in(ctx.message.channel).administrator:
-            await bot.send_message(ctx.message.channel, 'You must be an administrator to set pin channel.')
-            return
-        try:
-            just_id = count[1][2:-1]
-            ch = bot.get_channel(int(just_id))
-            if ch and _pin_perm_check(ctx.message.guild,ctx.message.channel,ch):
-                bot.cursor.execute('REPLACE INTO pins(source,dest) VALUES(?,?)',(ctx.message.channel.id,just_id))
-                bot.conn.commit()
-                await bot.send_message(ctx.message.channel, 'Set pin destination for {} to {}'.format(ctx.message.channel.mention,ch.mention),code_block=False)
-                return
-            else:
-                raise Exception()
-        except:
-            await bot.send_message(ctx.message.channel, 'Invalid pin channel (must be a channel on this server + bot must have proper permissions)')
-            return
-    try:
-        if int(count[0])<=0:
-            await bot.send_message(ctx.message.channel, 'usage:\n-pin <count>\n-pin set <channel>')
-            return
-    except:
-        await bot.send_message(ctx.message.channel, 'usage:\n-pin <count>\n-pin set <channel>')
-        return
 
-    r=bot.cursor.execute('SELECT dest FROM pins WHERE source=?',(ctx.message.channel.id,))
-    dest = r.fetchone()
-    if not dest:
-        await bot.send_message(ctx.message.channel, 'No destination channel set for pins, use -pin set <channel>')
-        return
-    pin_channel=bot.get_channel(dest[0])
-    # do a extra permissions check for safety:
-    if pin_channel and _pin_perm_check(ctx.message.guild,ctx.message.channel,pin_channel):
-        pins = await bot.pins_from(ctx.message.channel)
-        await _move_pins(list(reversed(pins))[:min(len(pins),int(count[0]))],pin_channel)
-    else:
-        await bot.send_message(ctx.message.channel, 'Invalid pin channel (must be a channel on this server + bot must have proper permissions)')
-        return
-def _pin_perm_check(server,src,dst):
-    src_perms=src.permissions_for(server.me)
-    dest_perms=dst.permissions_for(server.me)
-    return dest_perms.send_messages and dest_perms.attach_files and dest_perms.embed_links\
-           and src_perms.read_message_history and src_perms.manage_messages and src_perms.read_messages
-async def _move_pins(pinlist,pin_channel):
-    for pin in pinlist:
-        e = _create_pin_embed(pin)
-        await bot.send_message(pin_channel, code_block=False, embed = e)
-        await bot.unpin_message(pin) # This isnt working, or pins_from isnt refreshsed
-@bot.command(pass_context=True, aliases = ['remind','remindme'])
-async def reminder(ctx, *args : str):
-    '''<datetime/timedelta> <message>
-Set a reminder; for example:
--reminder 3pm June 10 hello
--reminder 3 days 10 hours world
-sub-commands:
-reminder list - list all reminders for yourself
-reminder delete <index> - delete specified reminder
-reminder timezone <tz> - set timezone for date reminders'''
-    helpmsg = 'usage:\n-reminder <datetime/timedelta> <message>'
-    time_display_format = "%Y-%m-%d %H:%M:%S"
-    isprivate = ctx.message.channel.type == PRIVATE_CHANNEL
-    fulltext = ' '.join(args)
-    if not len(args):
-        await bot.send_message(ctx.message.channel, helpmsg)
-        return
-    server_id = ctx.message.guild and ctx.message.guild.id or ctx.message.channel.id
-    subcmd = args[0]
-    r = bot.cursor.execute('SELECT timezone from timezones where server=?',(server_id,)).fetchone()
-    settings = {'TIMEZONE':(r and r[0]) or 'UTC', 'TO_TIMEZONE':'UTC', 'PREFER_DATES_FROM': 'future'}
-    disp_settings = {'TO_TIMEZONE':(r and r[0]) or 'UTC', 'TIMEZONE':'UTC', 'PREFER_DATES_FROM': 'future'}
-    def parse_reminder_time(txt):
-        dates = search_dates(txt, settings = settings)
-        if dates == None:
-            return None,None
-        for datestr,dt in dates:
-            if txt.startswith(datestr):
-                msg = txt[len(datestr):].lstrip()
-                if dt < datetime.datetime.utcnow():
-                    diff = datetime.datetime.utcnow() - dt
-                    return datetime.datetime.utcnow() + diff, msg
-                return dt, msg
-        return None,None
-    if subcmd in ('list','-l'):
-        r = bot.cursor.execute('SELECT message,datetime FROM reminders where creator = ? and server = ? ORDER by datetime ASC',(ctx.message.author.id,server_id))
-        res = r.fetchall()
-        if not res:
-            await bot.send_message(ctx.message.channel, 'You have 0 reminders.')
-            return
-        p = ''
-        for i,r in enumerate(res):
-            p+= '{}. "{}" on {}\n'.format(i,r[0],dateparser.parse(r[1],settings = disp_settings).strftime(time_display_format))
-        await bot.send_message(ctx.message.channel, p)
-    elif subcmd in ('delete','del'):
-        if len(args)<2 or not re.match('^\d*$',args[1]):
-            await bot.send_message(ctx.message.channel, 'usage:\n-reminder del <index>')
-            return
-        
-        r = bot.cursor.execute('SELECT creator,role,channel,server,datetime,message FROM reminders where creator = ? and server = ? ORDER by datetime ASC',(ctx.message.author.id,server_id))
-        res = r.fetchall()
-        bot.cursor.execute('DELETE FROM reminders WHERE creator = ? and role = ? and channel = ? and server = ? and datetime = ? and message = ?', res[int(args[1])])
-        bot.conn.commit()
-        await bot.send_message(ctx.message.channel, 'Reminder deleted.')
-    elif subcmd in ('timezone','tz'):
-        if len(args)<2:
-            await bot.send_message(ctx.message.channel, 'usage:\n-reminder timezone <timezone>')
-            return
-        if not isprivate and not ctx.message.author.permissions_in(ctx.message.channel).administrator:
-            await bot.send_message(ctx.message.channel, 'You must be an administrator to set reminder timezone for this server.')
-            return
-        tz = args[1]
-        bot.cursor.execute('REPLACE INTO timezones(server,timezone) VALUES(?,?)',(server_id,tz))
-        bot.conn.commit()
-        await bot.send_message(ctx.message.channel, 'Server timezone set to "{}"'.format(tz))
-    # elif subcmd is role or channel, this isnt that useful, maybe implement later.
-    # elif re.match('^@&.*$',subcmd):
-        # if not ctx.message.author.permissions_in(ctx.message.channel).administrator:
-            # await bot.send_message(ctx.message.channel, 'You must be an administrator to set reminders for a role')
-            # return
-        # print([role.name for role in ctx.message.guild.roles],subcmd[1:])
-        # validroles = [role for role in ctx.message.guild.roles if role.name==subcmd[1:]]
-        # if not validroles:
-            # await bot.send_message(ctx.message.channel, 'Role not found.',code_block=False)
-            # return
-        # await bot.send_message(ctx.message.channel, 'channel, @{}'.format(validroles[0]),code_block=False)
-    elif len(args)>1:
-        date,msg = parse_reminder_time(fulltext)
-        if not date:
-            await bot.send_message(ctx.message.channel, 'Could not find a time or date in your message, try being more specific. For example, use "in 10 days" instead of "10 days" or "5 minutes" instead of "5m".')
-            return
-        if date.tzinfo:
-            await bot.send_message(ctx.message.channel, 'timezone argument not (currently) supported, set global timezone for this server with -reminder timezone <tz>')
-            return
-        if date <= datetime.datetime.utcnow():
-            await bot.send_message(ctx.message.channel, 'Given date ({}) has already passed, try being more specific.'.format(date))
-            return
-        bot.cursor.execute('REPLACE INTO reminders(creator,server,channel,datetime,message) VALUES(?,?,?,?,?)',(ctx.message.author.id,server_id,ctx.message.channel.id,date,msg))
-        bot.conn.commit()
-        await bot.send_message(ctx.message.channel, 'reminder set for {}'.format(dateparser.parse(date.strftime("%Y-%m-%d %H:%M:%S.%f"),settings = disp_settings).strftime(time_display_format)))
-    else:
-        await bot.send_message(ctx.message.channel, helpmsg)
-    return
-        
 async def announce_internals(ctx,msg,announce_id,announce_name,commandname):
     destination = ctx.message.channel
-    if not msg or not len(msg):
+    if msg not in ('on','off',None):
+        raise commands.BadArgument()
+    if not msg:
         r=bot.cursor.execute('SELECT 1 FROM announce WHERE channel=? AND type=?',(destination.id,announce_id))
         enabled = r.fetchone()
         if destination.type == PRIVATE_CHANNEL:
@@ -473,10 +322,7 @@ async def announce_internals(ctx,msg,announce_id,announce_name,commandname):
         else:
             await bot.send_message(destination, '{} {} for {}.'.format(announce_name,'enabled' if enabled else 'not enabled',destination.mention), code_block=False)
         return
-    if not destination.type == PRIVATE_CHANNEL and not ctx.message.author.permissions_in(ctx.message.channel).administrator:
-        await bot.send_message(destination, 'You must be an administrator to use this command.')
-        return
-    if msg in ('on','off'):
+    else:
         if msg == 'on':
             bot.cursor.execute('REPLACE INTO announce (channel,type) VALUES (?,?)',(destination.id,announce_id))
             bot.conn.commit()
@@ -491,88 +337,94 @@ async def announce_internals(ctx,msg,announce_id,announce_name,commandname):
                 await bot.send_message(destination, '{} disabled.'.format(announce_name))
             else:
                 await bot.send_message(destination, '{} disabled for {}.'.format(announce_name,destination.mention), code_block=False)
-    else:
-        await bot.send_message(destination, 'usage: -{} <on|off>'.format(commandname))
 
-@bot.command(pass_context=True,aliases=['setleague','league','pricecheck'])
-async def pcleague(ctx, *league : str):
-    '''<league>
-Set league for pricing in this channel, options are: tmpStandard, tmpHardcore, eventStandard, eventHardcore, Standard, Hardcore.'''
-    destination = ctx.message.channel
-    if not league or not len(league):
-        r=bot.cursor.execute('SELECT league FROM pricecheck WHERE channel=?',(destination.id,))
-        league = (r.fetchone() or ('tmpStandard',))[0]
-        if destination.type == PRIVATE_CHANNEL:
-            await bot.send_message(destination, 'Currently checking prices in {}. -help pcleague to change.'.format(league,))
+class Misc(commands.Cog):
+    @commands.command(pass_context=True,aliases=['setleague','league','pricecheck'])
+    @admin_or_dm()
+    async def pcleague(self, ctx, league: str=None):
+        '''[<league>]
+    Set league for pricing in this channel, options are: tmpStandard, tmpHardcore, eventStandard, eventHardcore, Standard, Hardcore.'''
+        destination = ctx.message.channel
+        if not league:
+            r=bot.cursor.execute('SELECT league FROM pricecheck WHERE channel=?',(destination.id,))
+            league = (r.fetchone() or ('tmpStandard',))[0]
+            if destination.type == PRIVATE_CHANNEL:
+                await bot.send_message(destination, 'Currently checking prices in {}. -help pcleague to change.'.format(league,))
+            else:
+                await bot.send_message(destination, 'Currently checking prices in {} for {}. -help pcleague to change.'.format(league,destination.mention), code_block=False)
+            return
+        try:
+            i = [a.lower() for a in db.VALID_PC_LEAGUES].index(league.lower())
+            bot.cursor.execute('REPLACE INTO pricecheck (channel,league) VALUES (?,?)',(destination.id,db.VALID_PC_LEAGUES[i]))
+            bot.conn.commit()
+            await bot.send_message(destination, 'Now pricechecking in {}.'.format(db.VALID_PC_LEAGUES[i]))
+        except ValueError:
+            await bot.send_message(destination, 'Not a valid league, must be one of: tmpStandard, tmpHardcore, eventStandard, eventHardcore, Standard, Hardcore')
+            
+    @commands.command(pass_context=True,aliases=['nextrace','nextevent'])
+    async def next(self, ctx):
+        '''Displays the upcoming race.'''
+        nextmsg = bot.db.next_event()
+        if nextmsg:
+            await bot.send_message(ctx.message.channel, '%s'%nextmsg)
         else:
-            await bot.send_message(destination, 'Currently checking prices in {} for {}. -help pcleague to change.'.format(league,destination.mention), code_block=False)
-        return
-    if not destination.type == PRIVATE_CHANNEL and not ctx.message.author.permissions_in(ctx.message.channel).administrator:
-        await bot.send_message(destination, 'You must be an administrator to use this command.')
-        return
-    try:
-        i = [a.lower() for a in db.VALID_PC_LEAGUES].index(' '.join(league).lower())
-        bot.cursor.execute('REPLACE INTO pricecheck (channel,league) VALUES (?,?)',(destination.id,db.VALID_PC_LEAGUES[i]))
-        bot.conn.commit()
-        await bot.send_message(destination, 'Now pricechecking in {}.'.format(db.VALID_PC_LEAGUES[i]))
-    except ValueError:
-        await bot.send_message(destination, 'Not a valid league, must be one of: tmpStandard, tmpHardcore, eventStandard, eventHardcore, Standard, Hardcore')
+            await bot.send_message(ctx.message.channel, 'No upcoming events.')
+            
 class Alerts(commands.Cog):
     '''Toggle on/off automatic annoucements of the following:'''
-    @commands.command(pass_context=True)
-    async def announcements(self, ctx, *toggle : str):
-        '''<on|off>
+    @commands.command(pass_context=True, invoke_without_command=True)
+    @admin_or_dm()
+    async def announcements(self, ctx, toggle: str):
+        '''[on|off]
     Turn forum announcements on/off.'''
-        await announce_internals(ctx,' '.join(toggle),'forumannounce','Forum news announcements','announcements')
+        await announce_internals(ctx,toggle,'forumannounce','Forum news announcements','announcements')
 
-    @commands.command(pass_context=True,aliases=['patchnote'])
-    async def patchnotes(self, ctx, *toggle : str):
-        '''<on|off>
+    @commands.command(pass_context=True,aliases=['patchnote'], invoke_without_command=True)
+    @admin_or_dm()
+    async def patchnotes(self, ctx, toggle: str):
+        '''[on|off]
     Turn patch note posts on/off.'''
-        await announce_internals(ctx,' '.join(toggle),'patchnotes','Patch note announcements','patchnotes')
+        await announce_internals(ctx,toggle,'patchnotes','Patch note announcements','patchnotes')
         
-    @commands.command(pass_context=True,aliases=['daily_deals'])
-    async def deals(self, ctx, *toggle : str):
-        '''<on|off|filter>
+    @commands.group(pass_context=True, aliases=['daily_deals'], invoke_without_command=True)
+    @admin_or_dm()
+    async def deals(self, ctx, toggle=None):
+        '''[on|off|filter <regexp>]
     Turn daily deal announcements on/off.
-    Add a regexp filter with -deals filter <regexp>
-    use the regexp: .* to show all deals.'''
-        destination = ctx.message.channel
-        if not destination.type == PRIVATE_CHANNEL and not ctx.message.author.permissions_in(ctx.message.channel).administrator:
-            await bot.send_message(destination, 'You must be an administrator to use this command.')
-            return
-        if toggle:
-            if (toggle[0] not in ('filter','on','off')):
-                await bot.send_message(destination, 'usage: -{} <on|off|filter>'.format('deals'))
-                return
-            elif toggle[0] == 'filter':
-                if len(toggle)<2:
-                    r = bot.cursor.execute('SELECT regexp FROM regexp_filters WHERE channel=? AND type=?',(ctx.message.channel.id,'dailydeal'))
-                    res = r.fetchone()
-                    await bot.send_message(destination, 'Current filter is: {}'.format(res[0] if res else '.*'))
-                else:
-                    r = bot.cursor.execute('REPLACE INTO regexp_filters (channel,type,regexp) VALUES (?,?,?)',(ctx.message.channel.id,'dailydeal',toggle[1]))
-                    bot.conn.commit()
-                    await bot.send_message(destination, 'Filter set to: {}'.format(toggle[1]))
-                return
-        await announce_internals(ctx,' '.join(toggle),'dailydeal','Daily deal announcements','deals')
-        
-    @commands.command(pass_context=True)
+    Add a regexp filter with -deals filter <regexp>'''
+        await announce_internals(ctx,toggle,'dailydeal','Daily deal announcements','deals')
+    
+    @deals.command(name='filter', pass_context=True)
+    @admin_or_dm()
+    async def deals_filter(self, ctx, regexp=None):
+        '''- Only show deals which match a given regexp filter
+        <regexp>: python regular expression (see python re module), will only show deals which match
+        default (show all) is: .*'''
+        if not regexp:
+            r = bot.cursor.execute('SELECT regexp FROM regexp_filters WHERE channel=? AND type=?',(ctx.message.channel.id,'dailydeal'))
+            res = r.fetchone()
+            await bot.send_message(ctx.message.channel, 'Current filter is: {}'.format(res[0] if res else '.*'))
+        else:
+            r = bot.cursor.execute('REPLACE INTO regexp_filters (channel,type,regexp) VALUES (?,?,?)',(ctx.message.channel.id,'dailydeal',regexp))
+            bot.conn.commit()
+            await bot.send_message(ctx.message.channel, 'Filter set to: {}'.format(regexp))
+
+    @commands.command(pass_context=True, invoke_without_command=True)
+    @admin_or_dm()
     async def events(self, ctx, *toggle : str):
-        '''<on|off>
+        '''[on|off]
     Turn event announcements on/off.'''
-        await announce_internals(ctx,' '.join(toggle),'event','Event announcements','events')
+        await announce_internals(ctx,toggle,'event','Event announcements','events')
 class Info(commands.Cog):
-    'Show info on in-game items. These commands have one letter aliases for quicker use (ex: -u)'
-    @commands.command(pass_context=True,aliases=['u','pc','us'])
+    'Show info on in-game items. These commands have short aliases for quicker use (ex: -u)'
+    @commands.command(pass_context=True, aliases=['u','pc','us'])
     async def unique(self, ctx, *itemname: str):
         '''<itemname>
     Shows stats for an item. Partial names acceptable.
     search <key words> (alias: -us)
     Search for items whose explicit mods contain ALL keywords.'''
         if not len(itemname):
-            await bot.send_message(ctx.message.channel, 'usage: -u <item name>')
-            return
+            raise commands.BadArgument
         # consider showing flavor text in the embed footer
         item = ' '.join(itemname)
         r=bot.cursor.execute('SELECT league FROM pricecheck WHERE channel=?',(ctx.message.channel.id,))
@@ -614,23 +466,21 @@ class Info(commands.Cog):
             return
         e = _create_unique_embed(data[0])
         await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
-
+        
     @commands.command(pass_context=True)
-    async def lab(self, ctx, *difficulty: str):
+    async def lab(self, ctx, difficulty: str=None):
         '''[<difficulty>]
         Displays map for current uber lab, or difficulty if specified (one of uber,merciless,cruel,normal)'''
-        if not len(difficulty) or not difficulty[0] in ('normal','cruel','merciless','uber','merc'):
-            diff = 'uber'
-        else:
-            diff = difficulty[0]
-        if diff == 'merc':
-            diff = 'merciless'
+        if not difficulty in ('normal','cruel','merciless','uber','merc'):
+            difficulty = 'uber'
+        if difficulty == 'merc':
+            difficulty = 'merciless'
         today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
-        r=bot.cursor.execute('select img_url from daily_labs where diff=? and date=?',(diff,today))
+        r=bot.cursor.execute('select img_url from daily_labs where diff=? and date=?',(difficulty,today))
         data = r.fetchone()
         if not data:
             _cache_labs()
-            r=bot.cursor.execute('select img_url from daily_labs where diff=? and date=?',(diff,today))
+            r=bot.cursor.execute('select img_url from daily_labs where diff=? and date=?',(difficulty,today))
             data = r.fetchone()
         if not data:
             return await bot.send_failure_message(ctx.message.channel)
@@ -642,8 +492,7 @@ class Info(commands.Cog):
         '''<skill>
     Shows stats for a skill gem. Partial names acceptable.'''
         if not len(skill_name):
-            await bot.send_message(ctx.message.channel, 'usage: -s <skill gem name>')
-            return
+            raise commands.BadArgument
         # consider showing flavor text in the embed footer
         item = ' '.join(skill_name)
         r=bot.cursor.execute('SELECT league FROM pricecheck WHERE channel=?',(ctx.message.channel.id,))
@@ -694,8 +543,7 @@ class Info(commands.Cog):
         '''<name>
     Shows exchange rate for a currency item. Partial names acceptable.'''
         if not len(currency_name):
-            await bot.send_message(ctx.message.channel, 'usage: -c <currency name>')
-            return
+            raise commands.BadArgument
         # consider showing flavor text in the embed footer
         item = ' '.join(currency_name)
         r=bot.cursor.execute('SELECT league FROM pricecheck WHERE channel=?',(ctx.message.channel.id,))
@@ -733,15 +581,6 @@ async def _search_result(edit_msg, author, remove, embed):
     for react in cache_msg.reactions:
         if react.emoji in DIGIT_EMOJI:
             await bot.remove_button(edit_msg, react.emoji)
- 
-@bot.command(pass_context=True,aliases=['nextrace','nextevent'])
-async def next(ctx):
-    '''Displays the upcoming race.'''
-    nextmsg = bot.db.next_event()
-    if nextmsg:
-        await bot.send_message(ctx.message.channel, '%s'%nextmsg)
-    else:
-        await bot.send_message(ctx.message.channel, 'No upcoming events.')
 
 def _strip_html_tags(text):
     return re.sub(r'<(?!One to)[^>]+>','',re.sub(r'<(br|tr|hr)[^>]+>','\n',re.sub(r' \| ','\n',text)),flags=re.I)
@@ -1034,63 +873,14 @@ def _create_deal_embed(title,img_url,name='Daily Deal'):
     e.set_author(name=name)
     return e
 
-def _create_pin_embed(pin):
-    content = pin.content
-    thumb = None
-    if pin.embeds:
-        emb = pin.embeds[0]
-        if emb.thumbnail != discord.Embed.Empty:
-            thumb = emb.thumbnail.url
-        if not content:
-            if emb.title != discord.Embed.Empty:
-                content = emb.title
-            elif emb.description != discord.Embed.Empty:
-                content = emb.description
-    e = discord.Embed(
-        description=content,
-        type='rich',
-        color=0x7289da,
-        timestamp=pin.created_at
-    )
-    if thumb:
-        e.set_thumbnail(url = thumb)
-    if pin.attachments:
-        e.set_image(url = pin.attachments[0].url)
-    e.set_author(
-        name = pin.author.display_name,
-        icon_url = pin.author.avatar_url,
-        url = 'https://discord.com/users/{}'.format(pin.author.id)
-    )
-    e.add_field(name='Original Message:',value='https://discord.com/channels/{}/{}/{}'.format(pin.guild.id,pin.channel.id,pin.id),inline=False)
-    e.set_footer(text='#{}'.format(pin.channel.name))
-    return e
-
 class backgroundTasks(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.reminders.start()
         self.forum_announcements.start()
 
     def cog_unload(self):
-        self.reminders.cancel()
         self.forum_announcements.cancel()
-        
-    @tasks.loop(seconds=5.0)
-    async def reminders(self):
-        r=bot.cursor.execute('''SELECT creator,role,channel,server,datetime,message FROM reminders WHERE datetime <= datetime('now')''')
-        for row in r.fetchall():
-            'announce and delete.'
-            try:
-                await bot.send_message(bot.get_channel(row[2]), '<@{}> {}'.format(row[0],row[5]),code_block=False)
-            except:
-                'channel missing or bot is blocked'
-            finally:
-                try:
-                    bot.cursor.execute('DELETE FROM reminders WHERE creator = ? and role = ? and channel = ? and server = ? and datetime = ? and message = ?', row)
-                    bot.conn.commit()
-                except:
-                    pass
-            
+
     @tasks.loop(seconds=60.0)
     async def forum_announcements(self):
         announce_types = [('forumannounce',partial(scrape_forum)),
@@ -1122,7 +912,6 @@ class backgroundTasks(commands.Cog):
                 'just for extra safety because an error here means the loop stops'
                 'this can be caused by things like maintenance'
 
-    @reminders.before_loop
     @forum_announcements.before_loop
     async def before_run(self):
         await self.bot.wait_until_ready()
@@ -1161,30 +950,16 @@ if __name__ =='__main__':
         bot.cursor.execute('''ALTER TABLE daily_deals ADD COLUMN end_date real''')
     except sqlite3.OperationalError:
         pass
-    bot.cursor.execute('''CREATE TABLE IF NOT EXISTS pins
-             (source int PRIMARY KEY,
-             dest int)''')
     bot.cursor.execute('''CREATE TABLE IF NOT EXISTS pricecheck
              (channel int PRIMARY KEY,
              league text)''')
-    bot.cursor.execute('''CREATE TABLE IF NOT EXISTS reminders
-             (creator int,
-             role int DEFAULT 0,
-             channel int DEFAULT 0,
-             server int DEFAULT 0,
-             datetime real,
-             message text,
-             interval int DEFAULT 0,
-             PRIMARY KEY (creator,server,message,datetime,channel,role))''')
-    bot.cursor.execute('''CREATE TABLE IF NOT EXISTS timezones
-             (server int PRIMARY KEY,
-             timezone text DEFAULT "UTC")''')
     bot.conn.commit()
     import cogs
     from cogs import *
     cogs.setup_all_cogs(bot)
     bot.add_cog(Alerts())
     bot.add_cog(Info())
+    bot.add_cog(Misc())
     bot.add_cog(backgroundTasks(bot))
     with open('token','r') as f:
         bot.run(f.read())

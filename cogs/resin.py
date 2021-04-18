@@ -29,19 +29,19 @@ class GenshinTools(commands.Cog, name='Genshin Tools'):
         self.resinalert.cancel()
         
     @commands.command()
-    async def resin(self, ctx, *amt):
-        ''' [<current amount|reset>] 
+    async def resin(self, ctx, amount=None):
+        ''' [<current amount>|reset] 
         Can also provide a negative amount to modify or use -resin reset to remove largest multiple of 40 (will leave <40 remaining).'''
-        if len(amt):
+        if amount:
             try:
-                assert int(amt[0])<=RESIN_CAP
-                if int(amt[0])<0:
-                    self.cursor.execute(''' UPDATE resin set amount=amount+? where user_id=?''',(int(amt[0]),ctx.author.id,))
+                assert int(amount)<=RESIN_CAP
+                if int(amount)<0:
+                    self.cursor.execute(''' UPDATE resin set amount=amount+? where user_id=?''',(int(amount),ctx.author.id,))
                 else:
-                    self.cursor.execute(''' REPLACE INTO resin (user_id,amount,timestamp)  VALUES (?,?,julianday('now')) ''',(ctx.author.id,int(amt[0])))
+                    self.cursor.execute(''' REPLACE INTO resin (user_id,amount,timestamp)  VALUES (?,?,julianday('now')) ''',(ctx.author.id,int(amount)))
                 self.conn.commit()
             except:
-                if amt[0].lower() == 'reset':
+                if amount.lower() == 'reset':
                     self.cursor.execute('''update resin set amount=amount-cast(((julianday('now')-timestamp)/(?/(24.*60)) + amount) / ? as int) * ? where user_id=?''',(RESIN_REGEN_IN_MINUTES,SMALLEST_SPENDABLE_RESIN,SMALLEST_SPENDABLE_RESIN,ctx.author.id,))
                     self.conn.commit()
                 else:
@@ -117,7 +117,8 @@ class GenshinTools(commands.Cog, name='Genshin Tools'):
         
     @commands.command()
     async def pity(self, ctx, banner, feedback_url):
-        '''<banner> must be one of: "character", "weapon", "standard"
+        '''<banner> <feedback_url>
+        <banner> must be one of: "character", "weapon", "standard"
         <feedback_url>: press esc and click "Feedback" in Paimon's menu, then copy the url that opens in your browser.
         
         *DO NOT USE THIS COMMAND IN PUBLIC CHANNELS*
