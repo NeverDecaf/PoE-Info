@@ -43,6 +43,9 @@ class PoeDB:
         field_names = scrape_poe_wiki.SKILL_QUALITY_PROPERTY_MAPPING.values()
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS skill_quality
                  ({}, PRIMARY KEY (name,q_type))'''.format(','.join([name+' text' for name in field_names])))
+        field_names = scrape_poe_wiki.PASSIVE_SKILLS_PROPERTY_MAPPING.values()
+        self.cursor.execute('''CREATE TABLE IF NOT EXISTS passive_skills
+                 (thumbnail_url text, {}, PRIMARY KEY (pagename, name))'''.format(','.join([name + (' integer' if name.startswith('is_') else ' text') for name in field_names])))
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS event_times
                  (id text primary key, startAt timestamp, endAt timestamp, url text)''')
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS ninja_data
@@ -69,7 +72,7 @@ class PoeDB:
         self.cursor.execute('''DROP TABLE {}_tmp'''.format(table))
         self.conn.commit()
         
-    def get_data(self,tablename,searchname,league,limit = 9, search_by_baseitem = False):
+    def get_data(self,tablename,searchname,league = None,limit = 9, search_by_baseitem = False):
         query = '''SELECT *,q_n.q_stat_text as qual_bonus_normal,q_a.q_stat_text as qual_bonus_anomalous,q_d.q_stat_text as qual_bonus_divergent,q_p.q_stat_text as qual_bonus_phantasmal FROM {} 
         left join skill_quality q_n on {}.name=q_n.name AND q_n.q_type=1
         left join skill_quality q_a on {}.name=q_a.name AND q_a.q_type=2
@@ -92,6 +95,14 @@ class PoeDB:
             query += 'AND drop_enabled'
         query+=''' GROUP BY unique_items.name ORDER BY MAX(chaosValue) LIMIT {}'''.format(limit)
         res=self.cursor.execute(query,(league,*keywords))
+        return res.fetchall()
+
+    def passive_search_description(self,keywords,limit = 9):
+        query = '''SELECT * FROM passive_skills WHERE passive_skills.desc COLLATE NOCASE LIKE "%"||?||"%" COLLATE NOCASE '''
+        for i in range(len(keywords)-1):
+            query+= 'AND passive_skills.desc COLLATE NOCASE LIKE "%"||?||"%" COLLATE NOCASE '
+        query+=''' LIMIT {}'''.format(limit)
+        res=self.cursor.execute(query,keywords)
         return res.fetchall()
         
     def get_currency(self,searchname,league,limit = 9,exact = False):
@@ -188,12 +199,14 @@ if __name__=='__main__':
     if len(sys.argv)>1 and sys.argv[1]=='-pc':
         pass #pricecheck only
     else:
-        #scrape uniques
-        a.add_items_async(scrape_poe_wiki.format_affixes(scrape_poe_wiki.scrape_unique_items()))
-        #scrape skill gems
-        a.add_items_async(scrape_poe_wiki.scrape_skill_gems(),'skill_gems')
-        #scrape skill quality
-        a.add_items_async(scrape_poe_wiki.scrape_skill_quality(),'skill_quality')
+        # #scrape uniques
+        # a.add_items_async(scrape_poe_wiki.format_affixes(scrape_poe_wiki.scrape_unique_items()))
+        # #scrape skill gems
+        # a.add_items_async(scrape_poe_wiki.scrape_skill_gems(),'skill_gems')
+        # #scrape skill quality
+        # a.add_items_async(scrape_poe_wiki.scrape_skill_quality(),'skill_quality')
+        # #scrape passive skills
+        a.add_items_async(scrape_poe_wiki.scrape_passive_skills(),'passive_skills')
         #scape events (RIP)
         a._scrape_events()
     # get poe.ninja data (mainly for price)

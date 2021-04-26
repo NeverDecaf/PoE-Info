@@ -562,6 +562,51 @@ class Info(commands.Cog):
             return
         e = _create_currency_embed(data[0])
         await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
+        
+    @commands.command(pass_context=True, aliases=['p','n','ns','ps'])
+    async def node(self, ctx, *skillname: str):
+        '''<name>
+    Shows information about a passive skill notable or keystone.
+    search <key words> (alias: -ps, -ns)
+    Search for passive whose description contains ALL keywords.'''
+        if not len(skillname):
+            raise commands.BadArgument
+        name = ' '.join(skillname)
+        if skillname[0].lower() == 'search' or ctx.invoked_with.endswith('s'):
+            if (len(skillname) + (ctx.invoked_with.endswith('s')))<2:
+                await bot.send_message(ctx.message.channel, 'usage: -ns <key words>')
+                return
+            data = bot.db.passive_search_description(skillname[(not ctx.invoked_with.endswith('s')):])
+            if not data:
+                await bot.send_failure_message(ctx.message.channel)
+                return
+            if len(data)>1:
+                # send choices
+                e = _create_search_embed(data)
+                sent_msg= await bot.send_message(ctx.message.channel, embed = e)
+                for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
+                    if not sent_msg.edited_at:
+                        await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, _create_node_embed(data[i]))
+                return
+            e = _create_node_embed(data[0])
+            await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
+            return
+        
+        data = bot.db.get_data('passive_skills',name)
+        if not data:
+            await bot.send_failure_message(ctx.message.channel)
+            return
+        if len(data)>1:
+            #send choices
+            e = _create_search_embed(data)
+            sent_msg= await bot.send_message(ctx.message.channel, embed = e)
+            for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
+                if not sent_msg.edited_at:
+                    await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, _create_node_embed(data[i]))
+            return
+        e = _create_node_embed(data[0])
+        await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
+        
 def _cache_labs():
     today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
     for lab,url in zip(('normal','cruel','merciless','uber'),get_lab_urls(today)):
@@ -772,6 +817,18 @@ def _create_gem_embed(data, quality=Quality.NORMAL):
         e.set_footer(text=data['primary_att'])
     else:
         e.set_footer(text='Colorless')
+    return e
+
+def _create_node_embed(data):
+    stats_string = data['desc'].replace('<br>','\n')
+    e = discord.Embed(url='https://pathofexile.gamepedia.com/{}'.format(data['name'].replace(' ','_')),
+        title=data['name'],
+        type='rich',color=0xa38d6d)
+    e.add_field(name='Keystone' if data['is_keystone'] else 'Notable', value=_strip_html_tags(stats_string), inline=False)
+
+    if 'image_url' in data.keys() and data['image_url']:
+        e.set_thumbnail(url='https://pathofexile.gamepedia.com/Special:Redirect/file/{}'.format(urlquote(data['image_url'])))
+
     return e
 
 def cloudscraper_get(url):

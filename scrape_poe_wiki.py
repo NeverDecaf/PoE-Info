@@ -239,7 +239,6 @@ def scrape_skill_quality(limit=50000):
                         except:
                                 time.sleep(4)
                                 #error, trying again.
-##                print('currently at',len(full_results),'/',expected_items,'items. row#:',rowindex)
                 if not len(api_results): # and len(full_results)>=expected_items:
                         break
                 for res in api_results:
@@ -374,6 +373,51 @@ def scrape_unique_items(limit=50000):
 ##        print('total unique_item results:',len(full_results))
         return full_results
 
+PASSIVE_SKILLS_PROPERTY_MAPPING={
+        'passive_skills._pageName':'pagename',
+        'passive_skills.stat_text':'desc',
+        'passive_skills.name':'name',
+        'passive_skills.is_notable':'is_notable',
+        'passive_skills.is_keystone':'is_keystone',
+        'passive_skills.icon':'image_url',
+}
+
+def scrape_passive_skills(limit=50000):
+        full_results=[]
+        rowindex = 0
+        query_limit = 500
+        last_rowid = -1 # adds 1 to this.
+        while rowindex<limit:
+                query = 'https://pathofexile.gamepedia.com/api.php?action=cargoquery&format=json&tables=passive_skills'+\
+                        '&fields='+','.join(['='.join((k,v)) for k,v in PASSIVE_SKILLS_PROPERTY_MAPPING.items()])+',passive_skills._rowID=rowid&where=passive_skills._rowID>={} AND (passive_skills.is_keystone OR passive_skills.is_notable)&order_by=passive_skills._rowID&limit={}'.format(last_rowid+1,query_limit)
+                # need to fetch in batches of 500 (the limit for one query)
+                # we will use _rowID to do this, continue querying until we get 0 results
+                # this isnt 100% safe but it should work unless someone does something to really break the db.
+                # we have fixed this maybe with 'expected_items', see above.
+                api_results = []
+                for i in range(3):
+                        rj=None
+                        try:
+                                r = requests.get(query)
+                                r.encoding = 'utf-8'
+                                rj = r.json()
+                                api_results = [a['title'] for a in rj['cargoquery']]
+                                break
+                        except:
+                                time.sleep(4)
+                                #error, trying again.
+##                print('currently at',len(full_results),'/',expected_items,'items. row#:',rowindex)
+                if not len(api_results): # and len(full_results)>=expected_items:
+                        break
+                for res in api_results:
+                        last_rowid = int(res['rowid'])
+                        res.pop('rowid',None)
+                        res['desc'] = remove_wiki_formats(html.unescape(res['desc']))
+                full_results.extend(api_results)
+                rowindex+=query_limit
+                time.sleep(3)
+        return full_results
+        
 #only the fields we care about.
 #itemclass 4 is gems. probably the only one we need
 POE_NINJA_FIELDS = ['id',
@@ -489,4 +533,5 @@ if __name__ == '__main__':
     # print(get_ninja_rates())
     # import datetime
     # print(get_lab_urls(datetime.datetime.utcnow().strftime('%Y-%m-%d')))
-    print(scrape_skill_quality())
+    # print(scrape_skill_quality())
+    print(scrape_passive_skills())
