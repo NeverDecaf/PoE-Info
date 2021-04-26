@@ -199,13 +199,13 @@ if __name__=='__main__':
     if len(sys.argv)>1 and sys.argv[1]=='-pc':
         pass #pricecheck only
     else:
-        # #scrape uniques
-        # a.add_items_async(scrape_poe_wiki.format_affixes(scrape_poe_wiki.scrape_unique_items()))
-        # #scrape skill gems
-        # a.add_items_async(scrape_poe_wiki.scrape_skill_gems(),'skill_gems')
-        # #scrape skill quality
-        # a.add_items_async(scrape_poe_wiki.scrape_skill_quality(),'skill_quality')
-        # #scrape passive skills
+        #scrape uniques
+        a.add_items_async(scrape_poe_wiki.format_affixes(scrape_poe_wiki.scrape_unique_items()))
+        #scrape skill gems
+        a.add_items_async(scrape_poe_wiki.scrape_skill_gems(),'skill_gems')
+        #scrape skill quality
+        a.add_items_async(scrape_poe_wiki.scrape_skill_quality(),'skill_quality')
+        #scrape passive skills
         a.add_items_async(scrape_poe_wiki.scrape_passive_skills(),'passive_skills')
         #scape events (RIP)
         a._scrape_events()
