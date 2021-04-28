@@ -1,6 +1,5 @@
 from discord.ext import commands, tasks
 import discord
-from dateparser.search import search_dates
 from dateparser import parse
 from dateparser.utils import localize_timezone
 import datetime
@@ -24,7 +23,7 @@ def parse_longest_substr_time(txt: str, settings: dict):
             diff = datetime.datetime.utcnow() - tmpdt
             tmpdt = datetime.datetime.utcnow() + diff
         dt = tmpdt
-        msg = ''.join(tokens[i+1])
+        msg = ''.join(tokens[i+1:])
     return dt, msg
 
 class Utility(commands.Cog):
