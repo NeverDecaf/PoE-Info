@@ -122,7 +122,7 @@ class GenshinTools(commands.Cog, name='Genshin Tools'):
         <feedback_url>: press esc and click "Feedback" in Paimon's menu, then copy the url that opens in your browser.
         
         *DO NOT USE THIS COMMAND IN PUBLIC CHANNELS*
-        Your feedback url gives others access to your account (until you relog), only use this in DMs to be safe.'''
+        Your feedback url gives others access to your account (for up to 24h), only use this in DMs to be safe.'''
         if banner.lower() not in ["character", "weapon", "standard"]:
             await self.bot.send_failure_message(ctx.message.channel,'```Invalid banner, must be one of: "character", "weapon", "standard"```')
             return
