@@ -438,31 +438,32 @@ def get_ninja_prices(league='tmpStandard'):
                      ('item','UniqueAccessory'),
                      ('item','SkillGem'),
                      ]
-##        endpoints = [('item','SkillGem'),]
+        # endpoints = [('item','SkillGem'),]
         data=[]
         api = 'https://poe.ninja/api/data/{}overview?league={}&type={}'
         for itemtype in endpoints:
-                r = requests.get(api.format(itemtype[0],league,itemtype[1]))
-                r.encoding = 'utf-8'
-                try:
-                        rj = r.json()
-                except JSONDecodeError:
-                        return None
-                for x in rj['lines']:
-                        if int(x['itemClass'])==4:
-                                if x['name'].startswith('Vaal ') and int(x['gemLevel'])==20 and int(x['gemQuality'])==20:
-                                        # use 20/20 for vaal gems
-                                        data.append({key:x[key] for key in POE_NINJA_FIELDS})
-                                elif int(x['gemLevel'])==1 and int(x['gemQuality'])==20:
-                                        # use 1/20 for normal gems
-                                        data.append({key:x[key] for key in POE_NINJA_FIELDS})
-                        elif x['name'].strip() in ['Tabula Rasa','Skin of the Lords','Skin of the Loyal','The Goddess Unleashed','Oni-Goroshi']:
-                                if int(x['links'])==6:
-                                        data.append({key:x[key] for key in POE_NINJA_FIELDS})
-                        elif 'links' not in x or int(x['links'])==0:
-                                data.append({key:x[key] for key in POE_NINJA_FIELDS})
-                        data[-1]['league'] = league
-                time.sleep(3)
+            r = requests.get(api.format(itemtype[0],league,itemtype[1]))
+            r.encoding = 'utf-8'
+            try:
+                rj = r.json()
+            except JSONDecodeError:
+                return None
+            for x in rj['lines']:
+                if int(x['itemClass'])==4:
+                    if re.search('(?: |^)Vaal ',x['name']) and int(x['gemLevel'])==20 and int(x.get('gemQuality',0))==20:
+                        # use 20/20 for vaal gems
+                        data.append({key:x[key] for key in POE_NINJA_FIELDS})
+                    elif int(x['gemLevel'])==1 and int(x.get('gemQuality',0))==20:
+                        # use 1/20 for normal gems
+                        data.append({key:x[key] for key in POE_NINJA_FIELDS})
+                elif x['name'].strip() in ['Tabula Rasa','Skin of the Lords','Skin of the Loyal','The Goddess Unleashed','Oni-Goroshi','Shadowstitch']:
+                    if int(x['links'])==6:
+                        data.append({key:x[key] for key in POE_NINJA_FIELDS})
+                elif 'links' not in x or int(x['links'])==0:
+                    data.append({key:x[key] for key in POE_NINJA_FIELDS})
+            time.sleep(3)
+        for d in data:
+            d.update({'league':league})
         return data
 def get_ninja_rates(league='tmpStandard'):
         '''use poe.ninja api to get currency prices'''
@@ -534,4 +535,5 @@ if __name__ == '__main__':
     # import datetime
     # print(get_lab_urls(datetime.datetime.utcnow().strftime('%Y-%m-%d')))
     # print(scrape_skill_quality())
-    print(scrape_passive_skills())
+    # print(scrape_passive_skills())
+    get_ninja_prices()
