@@ -28,7 +28,7 @@ class GenshinTools(commands.Cog, name='Genshin Tools'):
     def cog_unload(self):
         self.resinalert.cancel()
         
-    @commands.command()
+    @commands.command(hidden=True)
     async def resin(self, ctx, amount=None):
         ''' [<current amount>|reset] 
         Can also provide a negative amount to modify or use -resin reset to remove largest multiple of 40 (will leave <40 remaining).'''
@@ -115,7 +115,7 @@ class GenshinTools(commands.Cog, name='Genshin Tools'):
         e.add_field(name = f'Last 5*: {name5}', value = f'{90 - pity5} Pull{"" if pity5==89 else "s"} until next pity ({pity5} pull{"" if pity5==1 else "s"} in)')
         return e
         
-    @commands.command()
+    @commands.command(hidden=True)
     async def pity(self, ctx, banner, feedback_url):
         '''<banner> <feedback_url>
         <banner> must be one of: "character", "weapon", "standard"
