@@ -19,6 +19,6 @@ requests-toolbelt==0.9.1
 six==1.16.0
 typing-extensions==3.10.0.0
 tzlocal==2.1
-urllib3==1.26.4
+urllib3==1.26.5
 websockets==9.0.2
 yarl==1.6.3
