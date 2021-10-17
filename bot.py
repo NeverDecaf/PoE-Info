@@ -20,6 +20,7 @@ from urllib.parse import quote as urlquote
 from scrape_poe_wiki import get_lab_urls
 from enum import Enum
 import cloudscraper
+WIKI_BASE = 'https://www.poewiki.net/wiki/'
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
@@ -640,7 +641,7 @@ def _create_currency_embed(data):
     else:
         frac = Fraction(data['chaosValue']).limit_denominator(int(limit))
         stats_string = 'Est. Price: **{}**c\napprox. **{}** : **{}**c'.format(price,frac.denominator,frac.numerator)
-    e = discord.Embed(url='https://pathofexile.gamepedia.com/{}'.format(data['name'].replace(' ','_')),
+    e = discord.Embed(url=f"{WIKI_BASE}{data['name'].replace(' ','_')}",
         description=_strip_html_tags(stats_string),
         title=data['name'].strip(),
         type='rich',color=0x638000)
@@ -689,16 +690,16 @@ def _create_unique_embed(data):
     if reqs and data['name']!='Tabula Rasa':
         stats_string+='Requires {}'.format(', '.join(reqs))
     stats_string+='{}'.format(if_not_zero(data['jewellimit'],'Limited To:'))
-    stats_string+='{}'.format(data['jewelradius'])
+    stats_string+='{}'.format(if_not_zero(data['jewelradius'],'Radius:'))
     stats_string=bold_nums.sub(r'**\1**', stats_string).replace('****','')
-    e = discord.Embed(url='https://pathofexile.gamepedia.com/{}'.format(data['name'].replace(' ','_')),
+    e = discord.Embed(url=f"{WIKI_BASE}{data['name'].replace(' ','_')}",
         description=_strip_html_tags(stats_string),
         title='\n'.join((data['name'].strip(),data['baseitem'].strip())),
         type='rich',color=0xaf6025)
     if 'icon' in data.keys() and data['icon']:
         e.set_thumbnail(url=data['icon'])
     elif 'image_url' in data.keys() and data['image_url']:
-        e.set_thumbnail(url='https://pathofexile.gamepedia.com/Special:Redirect/file/{}'.format(urlquote(data['image_url'])))
+        e.set_thumbnail(url=f"{WIKI_BASE}Special:Redirect/file/{urlquote(data['image_url'])}")
     if data['impl'] or data['expl']: #this is only for tabula
         header = re.compile('<th[^>]*>(.*?)<\/th>',re.DOTALL)
         expl_mods = str(data['expl'])
@@ -745,14 +746,29 @@ def _create_gem_embed(data, quality=Quality.NORMAL):
         stats_string+='Mana Multiplier: {}%\n'.format(data['mana_multiplier'])
     if data['radius']:
         stats_string+='Radius: {}\n'.format(data['radius'])
-    if int(data['is_res']):
-        stats_string+='Mana Reserved: {}%\n'.format(data['mana_cost'])
-##        stats_string+='Mana Reserved: {}\n'.format(data['is_res'])
-    elif data['mana_cost']:
-        if data['mana_cost_max']:
-            stats_string+='Mana Cost: ({}-{})\n'.format(data['mana_cost'],data['mana_cost_max'])
-        else:
-            stats_string+='Mana Cost: {}\n'.format(data['mana_cost'])
+
+    def rangeify(key):
+        if data[f'{key}_max']:
+            return f"({data[key]}-{data[f'{key}_max']})"
+        return data[key]
+    if data['cost_amounts']:
+        stats_string+=f"{data['cost_types']} Cost: {rangeify('cost_amounts')}\n"
+    if data['mana_res_flat']:
+        stats_string+=f"Mana Reserved: {rangeify('mana_res_flat')}\n"
+    if data['mana_res_percent']:
+        stats_string+=f"Mana Reserved: {rangeify('mana_res_percent')}%\n"
+    if data['life_res_flat']:
+        stats_string+=f"Life Reserved: {rangeify('life_res_flat')}\n"
+    if data['life_res_percent']:
+        stats_string+=f"Life Reserved: {rangeify('life_res_percent')}%\n"
+    # if int(data['is_res']):
+        # stats_string+='Mana Reserved: {}%\n'.format(data['mana_cost'])
+# ##        stats_string+='Mana Reserved: {}\n'.format(data['is_res'])
+    # elif data['mana_cost']:
+        # if data['mana_cost_max']:
+            # stats_string+='Mana Cost: ({}-{})\n'.format(data['mana_cost'],data['mana_cost_max'])
+        # else:
+            # stats_string+='Mana Cost: {}\n'.format(data['mana_cost'])
     if data['vaal_souls_requirement']:
         stats_string+='Souls Per Use: {}\n'.format(data['vaal_souls_requirement'])
     if data['vaal_stored_uses']:
@@ -801,7 +817,7 @@ def _create_gem_embed(data, quality=Quality.NORMAL):
     if data['primary_att'].lower() == 'dexterity':
         gemcolor = green
         
-    e = discord.Embed(url='https://pathofexile.gamepedia.com/{}'.format(data['name'].replace(' ','_')),
+    e = discord.Embed(url=f"{WIKI_BASE}{data['name'].replace(' ','_')}",
         title=data['name'],
         type='rich',color=gemcolor)
     e.add_field(name=data['tags'],value=_strip_html_tags(stats_string),inline=False)
@@ -821,13 +837,13 @@ def _create_gem_embed(data, quality=Quality.NORMAL):
 
 def _create_node_embed(data):
     stats_string = data['desc'].replace('<br>','\n')
-    e = discord.Embed(url='https://pathofexile.gamepedia.com/{}'.format(data['name'].replace(' ','_')),
+    e = discord.Embed(url=f"{WIKI_BASE}{data['name'].replace(' ','_')}",
         title=data['name'],
         type='rich',color=0xa38d6d)
     e.add_field(name='Keystone' if data['is_keystone'] else 'Notable', value=_strip_html_tags(stats_string), inline=False)
 
     if 'image_url' in data.keys() and data['image_url']:
-        e.set_thumbnail(url='https://pathofexile.gamepedia.com/Special:Redirect/file/{}'.format(urlquote(data['image_url'])))
+        e.set_thumbnail(url=f"{WIKI_BASE}Special:Redirect/file/{urlquote(data['image_url'])}")
 
     return e
 

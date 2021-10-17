@@ -17,6 +17,7 @@ abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
 ##SCRIPTDIR = os.path.dirname(os.path.abspath(__file__))
+WIKI_BASE = 'https://www.poewiki.net/w/'
 
 regex_wikilinks = re.compile(r'\[\[([^\]\|]*)\]\]|\[\[[^\]\|]*\|([^\]\|]*)\]\]')
 """
@@ -34,12 +35,14 @@ put in a manually prepared version that covers all styles in one overview.
 """
 
 regex_wiki_markup = re.compile(r'<[^>]*class="[^"]*"[^>]*><([^>]*)></[^>]*>')
+regex_wiki_styling = re.compile(r'< ?em[^>]*class="[^"]*"[^>]*>([^>]*)</[^>]*>')
 
 def remove_wiki_formats(text):
         if text is None:
                 return None
         text = regex_wikilinks.sub(r'\1\2', text)       # remove wiki links with regular expression. See the start of the script.
         text = regex_wiki_markup.sub(r'**\1**', text) # remove wiki markup, covers veiled mods and corrupted text, will also bold for embed
+        text = regex_wiki_styling.sub(r'\1', text) # replace normal styling that uses <em> tags.
         text = text.replace('&#60;', '<').replace('&#62;', '>')
         return text
 
@@ -87,7 +90,7 @@ def format_affixes(item_list):
                                 # print('Style variant expected but not found for: ' + item['name'] +'\nItem gets parsed as usual and added to the file, double check there.')
                 
                 mod_line = item['name']
-                
+
                 if item['impl']:
                         impl_mod_list = re.split('<br\s*/?\s*>',item['impl'])
                         impl_mod_list = remove_hidden_mods(impl_mod_list)
@@ -113,8 +116,8 @@ def format_affixes(item_list):
 
 # cargo wiki field: local sqlitedb field
 SKILL_GEM_VARIABLE_FIELDS={
-                #skill_levels fields
-##                'skill_levels.stat_text':'stat_text', # use the one from `skill` as it already has ranges
+                # skill_levels fields
+#                'skill_levels.stat_text':'stat_text', # use the one from `skill` as it already has ranges
                 'skill_levels.cooldown':'cooldown',
                 'skill_levels.critical_strike_chance':'crit_chance',
                 'skill_levels.damage_effectiveness':'damage_effectiveness',
@@ -123,12 +126,19 @@ SKILL_GEM_VARIABLE_FIELDS={
                 'skill_levels.experience':'xp',
                 'skill_levels.intelligence_requirement':'int_requirement',
                 'skill_levels.level_requirement':'level_requirement',
-                'skill_levels.mana_cost':'mana_cost',
+                # 'skill_levels.mana_cost':'mana_cost',
                 'skill_levels.mana_multiplier':'mana_multiplier',
                 'skill_levels.stored_uses':'stored_uses',
                 'skill_levels.strength_requirement':'str_requirement',
                 'skill_levels.vaal_souls_requirement':'vaal_souls_requirement',
                 'skill_levels.vaal_stored_uses':'vaal_stored_uses',
+                
+                'skill_levels.cost_amounts':'cost_amounts',
+                'skill_levels.cost_types':'cost_types',
+                'skill_levels.mana_reservation_flat': 'mana_res_flat',
+                'skill_levels.mana_reservation_percent': 'mana_res_percent',
+                'skill_levels.life_reservation_flat': 'life_res_flat',
+                'skill_levels.life_reservation_percent': 'life_res_percent',
         }
 SKILL_GEM_PROPERTY_MAPPING=dict(
         {
@@ -144,7 +154,7 @@ SKILL_GEM_PROPERTY_MAPPING=dict(
                 #skill fields:
                 'skill_levels.attack_speed_multiplier':'attack_speed_multiplier',
                 'skill.skill_icon':'image_url',
-                'skill.has_reservation_mana_cost':'is_res',
+                # 'skill.has_reservation_mana_cost':'is_res',
                 'skill.quality_stat_text':'qual_bonus',
                 'skill.item_class_restriction':'item_restriction',
                 'skill.max_level':'max_level',
@@ -176,7 +186,7 @@ def scrape_skill_gems(limit=100000):
         keyed_results = {}
 
         while rowindex<limit:
-                query = 'https://pathofexile.gamepedia.com/api.php?action=cargoquery&format=json&tables=skill_gems,skill,skill_levels&join_on=skill_gems._pageName=skill._pageName,skill_gems._pageName=skill_levels._pageName&fields='+\
+                query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_gems,skill,skill_levels&join_on=skill_gems._pageName=skill._pageName,skill_gems._pageName=skill_levels._pageName&fields='+\
                 ','.join(['='.join((k,v)) for k,v in SKILL_GEM_PROPERTY_MAPPING.items()])+',skill_gems._rowID=rowid,skill_levels.level=level&where=skill_gems._rowID>{} AND (skill_levels.level=skill.max_level OR skill_levels.level<2)&order_by=skill_gems._rowID&limit={}'.format(last_rowid+1,query_limit)
                 api_results = []
                 for i in range(3):
@@ -203,16 +213,15 @@ def scrape_skill_gems(limit=100000):
                                 keyed_results[res['name']].update({'{}_max'.format(k):v for k,v in res.items() if k in SKILL_GEM_VARIABLE_FIELDS.values()})
                         elif thislevel == 0:
                                 #updates dict, replacing only the empty values with new ones
-                                # filters res, result contains only keys for which keyed_results has a value of None/0/""
                                 keyed_results[res['name']].update(
-                                        {k:v for k,v in res.items() if k in [k for k,v in keyed_results[res['name']].items() if not v]}
+                                        {k:v for k,v in res.items() if k not in [k for k,v in keyed_results[res['name']].items() if v]}
                                         )
                         elif thislevel == 1:
                                 #update with all non-null values
                                 keyed_results[res['name']].update({k:v for k,v in res.items() if v})
-                
                 rowindex+=query_limit
                 time.sleep(3)
+                
         return keyed_results.values()
 
 def scrape_skill_quality(limit=50000):
@@ -221,7 +230,7 @@ def scrape_skill_quality(limit=50000):
         query_limit = 500
         last_rowid = -1 # adds 1 to this.
         while rowindex<limit:
-                query = 'https://pathofexile.gamepedia.com/api.php?action=cargoquery&format=json&tables=skill_quality'+\
+                query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_quality'+\
                         '&fields='+','.join(['='.join((k,v)) for k,v in SKILL_QUALITY_PROPERTY_MAPPING.items()])+',skill_quality._rowID=rowid&where=skill_quality._rowID>{} &order_by=skill_quality._rowID&limit={}'.format(last_rowid+1,query_limit)
                 # need to fetch in batches of 500 (the limit for one query)
                 # we will use _rowID to do this, continue querying until we get 0 results
@@ -299,7 +308,7 @@ UNIQUE_ITEM_PROPERTY_MAPPING={
 #image_url is only available if we were lucky enough to scrape it from the db.
 def get_image_url(pageName, image_url, is_div_card=False):
         #returns a (best guess) direct url to the main (thumbnail) image for this page.
-        query = 'http://pathofexile.gamepedia.com/api.php?action=query&titles={}&prop=pageimages|images&format=json&pithumbsize=10000&imlimit=500'.format(pageName)
+        query = f'{WIKI_BASE}api.php?action=query&titles={pageName}&prop=pageimages|images&format=json&pithumbsize=10000&imlimit=500'
         r = requests.get(query)
         r.encoding = 'utf-8'
         rj = r.json()
@@ -323,7 +332,7 @@ def get_image_url(pageName, image_url, is_div_card=False):
 
                 image_url = all_images[-1]
         
-        r = requests.get('http://pathofexile.gamepedia.com/api.php?action=query&titles={}&prop=imageinfo&iiprop=url&format=json'.format(image_url))
+        r = requests.get(f'{WIKI_BASE}api.php?action=query&titles={image_url}&prop=imageinfo&iiprop=url&format=json')
         r.encoding = 'utf-8'
         rj = r.json()
         pagenum,data = rj['query']['pages'].popitem()
@@ -339,7 +348,7 @@ def scrape_unique_items(limit=50000):
         query_limit = 500
         last_rowid = -1 # adds 1 to this.
         while rowindex<limit:
-                query = 'https://pathofexile.gamepedia.com/api.php?action=cargoquery&format=json&tables=items,weapons,shields,armours,jewels,flasks&join_on=items._pageName=weapons._pageName,items._pageName=shields._pageName,items._pageName=armours._pageName'+\
+                query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=items,weapons,shields,armours,jewels,flasks&join_on=items._pageName=weapons._pageName,items._pageName=shields._pageName,items._pageName=armours._pageName'+\
                         ',items._pageName=jewels._pageName,items._pageName=flasks._pageName'+\
                         '&fields='+','.join(['='.join((k,v)) for k,v in UNIQUE_ITEM_PROPERTY_MAPPING.items()])+',items._rowID=rowid&where=rarity=\'Unique\' AND items._rowID>={}&group_by=items._pageName&order_by=items._rowID&limit={}'.format(last_rowid+1,query_limit)
                 # need to fetch in batches of 500 (the limit for one query)
@@ -364,8 +373,14 @@ def scrape_unique_items(limit=50000):
                 for res in api_results:
                         last_rowid = int(res['rowid'])
                         res.pop('rowid',None)
-                        res['impl'] = remove_wiki_formats(html.unescape(res['impl']))
-                        res['expl'] = remove_wiki_formats(html.unescape(res['expl']))#.replace('<br>','\n')
+                        # print(res)
+                        # remove_wiki_formats
+                        res.update({k:remove_wiki_formats(html.unescape(v)) for k,v in res.items()})
+                        # force add impl and expl
+                        res['impl'] = res.get('impl','')
+                        res['expl'] = res.get('expl','')
+                        # res['impl'] = remove_wiki_formats(html.unescape(res.get('impl','')))
+                        # res['expl'] = remove_wiki_formats(html.unescape(res.get('expl','')))#.replace('<br>','\n')
                 full_results.extend(api_results)
                 rowindex+=query_limit
                 time.sleep(3)
@@ -388,7 +403,7 @@ def scrape_passive_skills(limit=50000):
         query_limit = 500
         last_rowid = -1 # adds 1 to this.
         while rowindex<limit:
-                query = 'https://pathofexile.gamepedia.com/api.php?action=cargoquery&format=json&tables=passive_skills'+\
+                query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=passive_skills'+\
                         '&fields='+','.join(['='.join((k,v)) for k,v in PASSIVE_SKILLS_PROPERTY_MAPPING.items()])+',passive_skills._rowID=rowid&where=passive_skills._rowID>={} AND (passive_skills.is_keystone OR passive_skills.is_notable)&order_by=passive_skills._rowID&limit={}'.format(last_rowid+1,query_limit)
                 # need to fetch in batches of 500 (the limit for one query)
                 # we will use _rowID to do this, continue querying until we get 0 results
@@ -532,8 +547,12 @@ def get_lab_urls(date):
     return ret
 if __name__ == '__main__':
     # print(get_ninja_rates())
+    # print(get_ninja_prices())
     # import datetime
     # print(get_lab_urls(datetime.datetime.utcnow().strftime('%Y-%m-%d')))
+    # print(scrape_skill_gems())
     # print(scrape_skill_quality())
     # print(scrape_passive_skills())
-    get_ninja_prices()
+    # print(scrape_unique_items())
+    
+    print(remove_wiki_formats(html.unescape('<em class="tc -mod">(278-321)</em>')))
