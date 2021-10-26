@@ -506,7 +506,7 @@ def get_ninja_rates(league='tmpStandard'):
                     continue
             id_map = {}
             for x in rj['currencyDetails']:
-                    id_map[x['name']] = (x['id'],x['icon'])
+                    id_map[x['name']] = (x['id'],x.get('icon',None))
             for x in rj['lines']:
                     data.append({'name':x['currencyTypeName'], 'chaosValue':x['chaosEquivalent']})
                     data[-1]['id'],data[-1]['icon'] = id_map[x['currencyTypeName']]
