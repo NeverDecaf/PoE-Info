@@ -546,7 +546,7 @@ def get_lab_urls(date):
                 ret.append(t)
     return ret
 if __name__ == '__main__':
-    # print(get_ninja_rates())
+    print(get_ninja_rates())
     # print(get_ninja_prices())
     # import datetime
     # print(get_lab_urls(datetime.datetime.utcnow().strftime('%Y-%m-%d')))
@@ -555,4 +555,4 @@ if __name__ == '__main__':
     # print(scrape_passive_skills())
     # print(scrape_unique_items())
     
-    print(remove_wiki_formats(html.unescape('<em class="tc -mod">(278-321)</em>')))
+    # print(remove_wiki_formats(html.unescape('<em class="tc -mod">(278-321)</em>')))
