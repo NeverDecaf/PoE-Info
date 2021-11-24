@@ -427,7 +427,7 @@ def scrape_passive_skills(limit=50000):
                 for res in api_results:
                         last_rowid = int(res['rowid'])
                         res.pop('rowid',None)
-                        res['desc'] = remove_wiki_formats(html.unescape(res['desc']))
+                        res['desc'] = remove_wiki_formats(html.unescape(res.get('desc','')))
                 full_results.extend(api_results)
                 rowindex+=query_limit
                 time.sleep(3)
@@ -463,6 +463,9 @@ def get_ninja_prices(league='tmpStandard'):
                 rj = r.json()
             except JSONDecodeError:
                 return None
+            if 'lines' not in rj: #rj['status'] != 200:
+                print('failed to fetch poe.ninja data for league:',league,'(normal for event leagues)')
+                return
             for x in rj['lines']:
                 if int(x['itemClass'])==4:
                     if re.search('(?: |^)Vaal ',x['name']) and int(x['gemLevel'])==20 and int(x.get('gemQuality',0))==20:
@@ -502,8 +505,11 @@ def get_ninja_rates(league='tmpStandard'):
             try:
                     rj = r.json()
             except JSONDecodeError:
-                    print("Error fetching currency data for:",type,'in',league)
+                    print("Error fetching currency data for:",type,'in',league,'(normal for event leagues)')
                     continue
+            if 'lines' not in rj: #rj['status'] != 200:
+                print('failed to fetch poe.ninja currency data for league:',league,'(normal for event leagues)')
+                continue
             id_map = {}
             for x in rj['currencyDetails']:
                     id_map[x['name']] = (x['id'],x.get('icon',None))
@@ -519,6 +525,9 @@ def get_ninja_rates(league='tmpStandard'):
             except JSONDecodeError:
                     print("Error fetching currency data for:",type,'in',league,'(normal for event leagues)')
                     continue
+            if 'lines' not in rj: #rj['status'] != 200:
+                print('failed to fetch poe.ninja currency data for league:',league,'(normal for event leagues)')
+                continue
             for x in rj['lines']:
                     data.append({'name':x['name'], 'chaosValue':x['chaosValue']})
                     data[-1]['id'],data[-1]['icon'] = -x['id'],x['icon']

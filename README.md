@@ -29,6 +29,7 @@ Here is a (maybe not exhaustive) list of commands, run -help to see the updated 
 type -help <command> for more info on any of these
 
 #### To run your own instance
-1. Run db.py and let it finish (might take a while)
-after this initial update you should run this file on a schedule to keep your database up-to-date
+1. Run db.py and let it finish (this might take a while)
 2. Put your discord bot token in a file called "token" and run bot.py
+3. Run `db.py` on a schedule to keep your database up to date, I recommend once every 24 hours.
+4. Run `db.py -pc` more frequently to keep item prices up to date, I recommend once every 1 hour.
