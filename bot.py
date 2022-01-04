@@ -121,7 +121,7 @@ class BotWithReactions(commands.Bot):
         only works in public channels. in PMs the message will be sent as normal.
         '''
         sent_msg = await self.send_file(*args, **kwargs)
-        if isinstance(args[0],discord.abc.GuildChannel) and not sent_msg.content == self.DEFAULT_FAILURE_MSG:
+        if not sent_msg.content == self.DEFAULT_FAILURE_MSG:
             await self.attach_button(sent_msg,author,self.DELETE_EMOJI,lambda x,y,z:self.delete_message(x))
         return sent_msg
     async def send_deletable_message(self,ctx,*args, code_block = True, **kwargs):
@@ -135,7 +135,7 @@ class BotWithReactions(commands.Bot):
             del kwargs['view']
         else:
             view = None
-        if isinstance(args[0],discord.abc.GuildChannel) and ((len(args)<2) or not args[1] == self.DEFAULT_FAILURE_MSG):
+        if ((len(args)<2) or not args[1] == self.DEFAULT_FAILURE_MSG):
             if not view:
                 view = restrictedView(ctx)
             await view.make_deletable()
