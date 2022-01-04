@@ -200,7 +200,7 @@ class BotWithReactions(commands.Bot):
                 except discord.errors.NotFound:
                     pass # this one means the message/reaction was deleted already so no big deal just ignore
         for msg in list(self.EMBEDPAGES.keys()):
-            datediff = (datetime.datetime.utcnow() - msg.created_at)
+            datediff = (datetime.datetime.now(datetime.timezone.utc) - msg.created_at)
             if datediff.days*24*60*60 + datediff.seconds > self.REACTION_TIMEOUT:
                 pages = self.EMBEDPAGES.pop(msg,[])
                 for emoji in pages:
@@ -220,7 +220,7 @@ class BotWithReactions(commands.Bot):
         if (payload.user_id is not None) and payload.user_id != self.user.id:
             await self.process_reactions(payload.message_id,payload.emoji.name,new_author=await self.obtain_user(payload.user_id),remove=True)
     async def on_message_edit(self,before,after):
-        datediff = (datetime.datetime.utcnow() - before.created_at)
+        datediff = (datetime.datetime.now(datetime.timezone.utc) - before.created_at)
         if before.content!=after.content and datediff.days*24*60*60+datediff.seconds<MESSAGE_EDITABLE_TIMEOUT: # need this check because auto-embed counts as editing
             await self.process_commands(after)
             try:
@@ -298,7 +298,7 @@ class BotWithReactions(commands.Bot):
             
 def admin_or_dm():
     async def predicate(ctx):
-        if ctx.message.channel.type == PRIVATE_CHANNEL or ctx.message.author.permissions_in(ctx.message.channel).administrator:
+        if ctx.message.channel.type == PRIVATE_CHANNEL or ctx.message.channel.permissions_for(ctx.message.author).administrator:
             return True
         raise commands.MissingPermissions('Administrator')
     return commands.check(predicate)
@@ -476,7 +476,7 @@ class Info(commands.Cog):
             difficulty = 'uber'
         if difficulty == 'merc':
             difficulty = 'merciless'
-        today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
+        today = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d')
         r=bot.cursor.execute('select img_url from daily_labs where diff=? and date=?',(difficulty,today))
         data = r.fetchone()
         if not data:
@@ -485,7 +485,7 @@ class Info(commands.Cog):
             data = r.fetchone()
         if not data:
             return await bot.send_failure_message(ctx.message.channel)
-        #'https://www.poelab.com/wp-content/labfiles/{}_{}.jpg'.format(datetime.datetime.utcnow().strftime('%Y-%m-%d'), diff)
+        #'https://www.poelab.com/wp-content/labfiles/{}_{}.jpg'.format(datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d'), diff)
         await bot.send_message(ctx.message.channel, data[0], code_block = False)
             
     @commands.command(pass_context=True,aliases=['s'])
@@ -609,7 +609,7 @@ class Info(commands.Cog):
         await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
         
 def _cache_labs():
-    today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
+    today = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d')
     for lab,url in zip(('normal','cruel','merciless','uber'),get_lab_urls(today)):
         if url:
             bot.cursor.execute('REPLACE INTO daily_labs (date,diff,img_url) VALUES (?,?,?)',(today,lab,url))

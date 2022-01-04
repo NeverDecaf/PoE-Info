@@ -33,3 +33,5 @@ type -help <command> for more info on any of these
 2. Put your discord bot token in a file called "token" and run bot.py
 3. Run `db.py` on a schedule to keep your database up to date, I recommend once every 24 hours.
 4. Run `db.py -pc` more frequently to keep item prices up to date, I recommend once every 1 hour.
+
+You must install the latest version of discord.py `pip install -U git+https://github.com/Rapptz/discord.py`

@@ -180,7 +180,7 @@ class Utility(commands.Cog):
             if len(query)<2:
                 await self.bot.send_message(ctx.message.channel, 'usage:\n-reminder timezone <timezone>')
                 return
-            if not isprivate and not ctx.message.author.permissions_in(ctx.message.channel).administrator:
+            if not isprivate and not ctx.message.channel.permissions_for(ctx.message.author).administrator:
                 await self.bot.send_message(ctx.message.channel, 'You must be an administrator to set reminder timezone for this server.')
                 return
             tz = query[1]
@@ -243,7 +243,7 @@ class Utility(commands.Cog):
             e.set_image(url = pin.attachments[0].url)
         e.set_author(
             name = pin.author.display_name,
-            icon_url = pin.author.avatar_url,
+            icon_url = pin.author.avatar.url,
             url = 'https://discord.com/users/{}'.format(pin.author.id)
         )
         e.add_field(name='Original Message:',value='https://discord.com/channels/{}/{}/{}'.format(pin.guild.id,pin.channel.id,pin.id),inline=False)
