@@ -26,6 +26,7 @@ dname = os.path.dirname(abspath)
 os.chdir(dname)
 
 MESSAGE_EDITABLE_TIMEOUT = 60*60*24 # seconds, max of 1 day.
+MESSAGE_BUTTON_TIMEOUT = 60*60 # 1hr
 PRIVATE_CHANNEL = discord.ChannelType.private
 SEARCH_REACTION_LIMIT = 9 # max digit emojis to show.
 DIGIT_EMOJI = ['\U00000031\U000020E3',
@@ -37,6 +38,33 @@ DIGIT_EMOJI = ['\U00000031\U000020E3',
                 '\U00000037\U000020E3',
                 '\U00000038\U000020E3',
                 '\U00000039\U000020E3']
+class restrictedView(discord.ui.View):
+    ephemeral_msg = False
+    message = None
+    def __init__(self, ctx, *args, **kwargs):
+        self.ctx = ctx
+        return super().__init__(*args,timeout=MESSAGE_BUTTON_TIMEOUT,**kwargs)
+    # @discord.ui.button(style=discord.ButtonStyle.red,emoji='✖')
+    # async def button_callback(self, button, interaction):
+        # await interaction.response.defer()
+        # await interaction.delete_original_message()
+    async def interaction_check(self, interaction):
+        if interaction.user == self.ctx.message.author:
+            return True
+        await interaction.response.send_message('Only the original requester may use this button.',ephemeral = True)
+    async def make_deletable(self):
+        delete_btn = discord.ui.Button(emoji='✖',style = discord.ButtonStyle.red)
+        async def delete_message(interaction):
+            await interaction.response.defer()
+            await interaction.delete_original_message()
+        delete_btn.callback = delete_message
+        self.add_item(delete_btn)
+    async def on_timeout(self):
+        if self.message:
+            if self.ephemeral_msg:
+                await self.message.delete()
+            else:
+                await self.message.edit(view=None)
 def char_to_emoji(letter):
     return chr(127365 + ord(letter.lower()))
 class Quality(Enum):
@@ -51,10 +79,10 @@ QUAL_TO_DB_COL_NAME = {
     Quality.PHANTASMAL : 'qual_bonus_phantasmal'
     }
 QUAL_TO_EMOJI = {
-    Quality.NORMAL : char_to_emoji('n'),
-    Quality.ANOMALOUS : char_to_emoji('a'),
-    Quality.DIVERGENT : char_to_emoji('d'),
-    Quality.PHANTASMAL : char_to_emoji('p')
+    Quality.NORMAL : 'Superior',
+    Quality.ANOMALOUS : 'Anomalous',
+    Quality.DIVERGENT : 'Divergent',
+    Quality.PHANTASMAL : 'Phantasmal'
     }
 class BotWithReactions(commands.Bot):
     DELETE_EMOJI = '\U0000274C'
@@ -96,62 +124,27 @@ class BotWithReactions(commands.Bot):
         if isinstance(args[0],discord.abc.GuildChannel) and not sent_msg.content == self.DEFAULT_FAILURE_MSG:
             await self.attach_button(sent_msg,author,self.DELETE_EMOJI,lambda x,y,z:self.delete_message(x))
         return sent_msg
-    async def send_deletable_message(self,author,*args, code_block = True, **kwargs):
+    async def send_deletable_message(self,ctx,*args, code_block = True, **kwargs):
         '''
         attaches a X reaction that allows the requester (author) to delete the sent message
 
         only works in public channels. in PMs the message will be sent as normal.
         '''
-        sent_msg = await self.send_message(*args, code_block=code_block, **kwargs)
-        if isinstance(args[0],discord.abc.GuildChannel) and not sent_msg.content == self.DEFAULT_FAILURE_MSG:
-            await self.attach_button(sent_msg,author,self.DELETE_EMOJI,lambda x,y,z:self.delete_message(x))
-        return sent_msg
-    async def make_deletable(self, msg, author):
-        '''
-        makes an existing message deletable (only by its original author)
-           
-        only works in public channels, not DMs
-        '''
-        if isinstance(msg.channel, discord.abc.GuildChannel) and not msg.content == self.DEFAULT_FAILURE_MSG:
-            await self.attach_button(msg,author,self.DELETE_EMOJI,lambda x,y,z:self.delete_message(x))
-        return msg
-    async def attach_button(self, message, author, emoji, callback, *data, user_restricted=True, single_use=False, **kwargs):
-        '''Add a reaction button. When pressed callback will be called with message,author,*data as arguments.'''
-        try:
-            key = (message.id,emoji)
-            if key not in self.REACTIONBUTTONS:
-                await message.add_reaction(emoji)
-            if not user_restricted:
-                author = None
-            self.REACTIONBUTTONS[key]=(time.time(),callback,message,single_use,author,data,kwargs)
-        except discord.errors.NotFound:
-            pass # this one means the message/reaction was deleted already so no big deal just ignore
-    async def remove_button(self, msg, emoji):
-        ''' removes an emojibutton, key is (msg.id,emoji) '''
-        key = (msg.id,emoji)
-        self.REACTIONBUTTONS.pop(key,None)
-        try:
-            await self.remove_all_reactions(msg,emoji)
-        except (discord.errors.NotFound, discord.errors.Forbidden):
-            # this one means the message/reaction was deleted already so no big deal just ignore
-            # Forbidden will occur if trying to delete other users emotes without permission
-            pass
-    async def create_paged_embed(self,author,channel,pages,default_page,edit_msg = None):
-        #pages is a dict of emoji:embed
-        # default_page is the key of the page that should be shown first
-        if edit_msg:
-            sent_msg = edit_msg
-            await sent_msg.edit(embed = pages[default_page])
+        if 'view' in kwargs:
+            view = kwargs['view']
+            del kwargs['view']
         else:
-            sent_msg = await self.send_deletable_message(author, channel, embed = pages[default_page])
-        self.EMBEDPAGES[sent_msg] = pages
-        for emoji in pages.keys():
-            await self.attach_button(sent_msg, author, emoji, self._swap_embed_page, emoji)
+            view = None
+        if isinstance(args[0],discord.abc.GuildChannel) and ((len(args)<2) or not args[1] == self.DEFAULT_FAILURE_MSG):
+            if not view:
+                view = restrictedView(ctx)
+            await view.make_deletable()
+            sent_msg = await self.send_message(*args, code_block=code_block, view=view, **kwargs)
+            view.message = sent_msg
+        else:
+            sent_msg = await self.send_message(*args, code_block=code_block, **kwargs)
         return sent_msg
-    async def _swap_embed_page(self, msg, author, remove, key):
-        await msg.edit(embed=self.EMBEDPAGES[msg][key])
-        return
-        
+
     async def auto_cleanup(self):
         now = time.time()
         while len(self.AUTO_CLEANUP):
@@ -416,6 +409,35 @@ class Alerts(commands.Cog):
         '''[on|off]
     Turn event announcements on/off.'''
         await announce_internals(ctx,toggle,'event','Event announcements','events')
+async def multiple_choice_view(ctx, data, func, edit_func=None):
+    '''<ctx>
+        pass context from original command
+        <data>
+        list of data items, data['name'] will be displayed on buttons
+        <func>
+        function to create the embed, will be passed data when button is clicked.
+        <edit_func>
+        if defined, will call this instead to edit the existing message entirely.
+    '''
+    view = restrictedView(ctx)
+    for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
+        button = discord.ui.Button(label=data[i]['name'])
+        async def show_item(interaction,idx=i):
+            await interaction.response.defer()
+            view.clear_items()
+            view.ephemeral_msg = False
+            await view.make_deletable()
+            if edit_func:
+                await edit_func(data[idx],ctx,interaction)
+            else:
+                await interaction.edit_original_message(content = None, embed = func(data[idx]), view=view)
+        button.callback = show_item
+        view.add_item(button)
+    sent_msg = await bot.send_deletable_message(ctx,ctx.message.channel, f'Multiple results, showing {min(len(data),SEARCH_REACTION_LIMIT)}/{len(data)}.', view=view)
+    view.message = sent_msg
+    view.ephemeral_msg = True
+    return sent_msg
+
 class Info(commands.Cog):
     'Show info on in-game items. These commands have short aliases for quicker use (ex: -u)'
     @commands.command(pass_context=True, aliases=['u','pc','us'])
@@ -435,20 +457,16 @@ class Info(commands.Cog):
             if (len(itemname) + (ctx.invoked_with == 'us'))<2:
                 await bot.send_message(ctx.message.channel, 'usage: -us <key words>')
                 return
-            data = bot.db.unique_search_explicit(itemname[(ctx.invoked_with != 'us'):],league)
+            data = bot.db.unique_search_explicit(itemname[(ctx.invoked_with != 'us'):],league,limit=999)
             if not data:
                 await bot.send_failure_message(ctx.message.channel)
                 return
             if len(data)>1:
                 #send choices
-                e = _create_search_embed(data)
-                sent_msg= await bot.send_message(ctx.message.channel, embed = e)
-                for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
-                    if not sent_msg.edited_at:
-                        await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, _create_unique_embed(data[i]))
+                await multiple_choice_view(ctx,data,_create_unique_embed)
                 return
             e = _create_unique_embed(data[0])
-            await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
+            await bot.send_deletable_message(ctx, ctx.message.channel, embed=e)
             return
         
         data = bot.db.get_data('unique_items',item,league)
@@ -459,14 +477,10 @@ class Info(commands.Cog):
                 return
         if len(data)>1:
             #send choices
-            e = _create_search_embed(data)
-            sent_msg= await bot.send_message(ctx.message.channel, embed = e)
-            for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
-                if not sent_msg.edited_at:
-                    await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, _create_unique_embed(data[i]))
+            await multiple_choice_view(ctx,data,_create_unique_embed)
             return
         e = _create_unique_embed(data[0])
-        await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
+        await bot.send_deletable_message(ctx, ctx.message.channel, embed=e)
         
     @commands.command(pass_context=True)
     async def lab(self, ctx, difficulty: str=None):
@@ -504,41 +518,38 @@ class Info(commands.Cog):
             return
         if len(data)>1:
             #send choices
-            e = _create_search_embed(data)
-            sent_msg = await bot.send_message(ctx.message.channel, embed=e)
-            for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
-                if not sent_msg.edited_at:
-                    await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], self._skill_internals, data[i], edit_msg = sent_msg)
-            return
-        await self._skill_internals(ctx.message,ctx.message.author,False,data[0])
+            return await multiple_choice_view(ctx,data,None,edit_func=self._skill_internals)
+        await self._skill_internals(data[0],ctx)
         
-    async def _skill_internals(self, msg, author, remove, data, edit_msg = None):
+    async def _skill_internals(self, data, ctx, interaction=None):
+        'if msg, edit msg instead of sending new one'
         # msg isnt reliable, could be either the initial message or the response depending on context, use edit_msg instead
-        if edit_msg and isinstance(edit_msg.channel,discord.abc.GuildChannel):
-            await edit_msg.clear_reactions()
+        view = restrictedView(ctx)
+        if interaction:
+            await interaction.edit_original_message(view=None)
+        
         pages = {}
         for k,v in QUAL_TO_DB_COL_NAME.items():
             if data[v]:
                 pages[QUAL_TO_EMOJI[k]] = _create_gem_embed(data,quality = k)
         if QUAL_TO_EMOJI[Quality.NORMAL] not in pages:
             pages[QUAL_TO_EMOJI[Quality.NORMAL]] = _create_gem_embed(data)
-        if len(pages)>1:
-            sent_msg = await bot.create_paged_embed(author, msg.channel, pages, QUAL_TO_EMOJI[Quality.NORMAL], edit_msg = edit_msg)
+        for k,v in pages.items():
+            button = discord.ui.Button(style=discord.ButtonStyle.primary,label=k)
+            view.add_item(button)
+            async def swap_to(interaction, key = k):
+                await interaction.response.defer()
+                await interaction.edit_original_message(content = None, embed = pages[key], view=view)
+            button.callback = swap_to
+        if len(pages) == 1:
+            view.clear_items()
+        await view.make_deletable()
+        if interaction:
+            await interaction.edit_original_message(content=None,embed=pages[QUAL_TO_EMOJI[Quality.NORMAL]], view=view)
         else:
-            if edit_msg:
-                await edit_msg.edit(embed = pages[QUAL_TO_EMOJI[Quality.NORMAL]])
-                sent_msg = edit_msg
-            else:
-                sent_msg = await bot.send_deletable_message(author, msg.channel, embed=pages[QUAL_TO_EMOJI[Quality.NORMAL]])
+            sent_msg = await bot.send_message(ctx.message.channel, embed=pages[QUAL_TO_EMOJI[Quality.NORMAL]], view=view)
+            view.message = sent_msg
 
-        await bot.make_deletable(sent_msg, author)
-        if edit_msg:
-            await asyncio.sleep(1)
-            cache_msg = await edit_msg.channel.fetch_message(edit_msg.id)
-            for react in cache_msg.reactions:
-                if react.emoji in DIGIT_EMOJI:
-                    await bot.remove_button(edit_msg, react.emoji)
-         
     @commands.command(pass_context=True,aliases=['c'])
     async def currency(self, ctx, *currency_name: str):
         '''<name>
@@ -555,14 +566,9 @@ class Info(commands.Cog):
             return
         if len(data)>1:
             #send choices
-            e = _create_search_embed(data)
-            sent_msg= await bot.send_message(ctx.message.channel, embed = e)
-            for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
-                if not sent_msg.edited_at:
-                    await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, _create_currency_embed(data[i]))
-            return
+            return await multiple_choice_view(ctx,data,_create_currency_embed)
         e = _create_currency_embed(data[0])
-        await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
+        await bot.send_deletable_message(ctx, ctx.message.channel, embed=e)
         
     @commands.command(pass_context=True, aliases=['p','n','ns','ps'])
     async def node(self, ctx, *skillname: str):
@@ -583,14 +589,9 @@ class Info(commands.Cog):
                 return
             if len(data)>1:
                 # send choices
-                e = _create_search_embed(data)
-                sent_msg= await bot.send_message(ctx.message.channel, embed = e)
-                for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
-                    if not sent_msg.edited_at:
-                        await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, _create_node_embed(data[i]))
-                return
+                return await multiple_choice_view(ctx,data,_create_node_embed)
             e = _create_node_embed(data[0])
-            await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
+            await bot.send_deletable_message(ctx, ctx.message.channel, embed=e)
             return
         
         data = bot.db.get_data('passive_skills',name)
@@ -599,14 +600,9 @@ class Info(commands.Cog):
             return
         if len(data)>1:
             #send choices
-            e = _create_search_embed(data)
-            sent_msg= await bot.send_message(ctx.message.channel, embed = e)
-            for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
-                if not sent_msg.edited_at:
-                    await bot.attach_button(sent_msg, ctx.message.author, DIGIT_EMOJI[i], _search_result, _create_node_embed(data[i]))
-            return
+            return await multiple_choice_view(ctx,data,_create_node_embed)
         e = _create_node_embed(data[0])
-        await bot.send_deletable_message(ctx.message.author, ctx.message.channel, embed=e)
+        await bot.send_deletable_message(ctx, ctx.message.channel, embed=e)
         
 def _cache_labs():
     today = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d')
@@ -615,18 +611,6 @@ def _cache_labs():
             bot.cursor.execute('REPLACE INTO daily_labs (date,diff,img_url) VALUES (?,?,?)',(today,lab,url))
     bot.cursor.execute('DELETE FROM daily_labs WHERE date <> ?',(today,))
     bot.conn.commit()
-def _create_search_embed(data):
-    return discord.Embed(description='\n'.join(['%i. %s'%(i+1,datum['name']) for i,datum in enumerate(data)]))
-async def _search_result(edit_msg, author, remove, embed):
-    if isinstance(edit_msg.channel,discord.abc.GuildChannel):
-        await edit_msg.clear_reactions()
-    await edit_msg.edit(embed = embed)
-    await bot.make_deletable(edit_msg, author)
-    await asyncio.sleep(1)
-    cache_msg = await edit_msg.channel.fetch_message(edit_msg.id)
-    for react in cache_msg.reactions:
-        if react.emoji in DIGIT_EMOJI:
-            await bot.remove_button(edit_msg, react.emoji)
 
 def _strip_html_tags(text):
     return re.sub(r'<(?!One to)[^>]+>','',re.sub(r'<(br|tr|hr)[^>]+>','\n',re.sub(r' \| ','\n',text)),flags=re.I)
