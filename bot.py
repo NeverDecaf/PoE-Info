@@ -44,27 +44,36 @@ class restrictedView(discord.ui.View):
     def __init__(self, ctx, *args, **kwargs):
         self.ctx = ctx
         return super().__init__(*args,timeout=MESSAGE_BUTTON_TIMEOUT,**kwargs)
-    # @discord.ui.button(style=discord.ButtonStyle.red,emoji='✖')
-    # async def button_callback(self, button, interaction):
-        # await interaction.response.defer()
-        # await interaction.delete_original_message()
+    @discord.ui.button(style=discord.ButtonStyle.red,emoji='✖',custom_id="delete")
+    async def delete_callback(self, button, interaction):
+        await interaction.response.defer()
+        await interaction.delete_original_message()
     async def interaction_check(self, interaction):
         if interaction.user == self.ctx.message.author:
             return True
         await interaction.response.send_message('Only the original requester may use this button.',ephemeral = True)
-    async def make_deletable(self):
-        delete_btn = discord.ui.Button(emoji='✖',style = discord.ButtonStyle.red)
-        async def delete_message(interaction):
-            await interaction.response.defer()
-            await interaction.delete_original_message()
-        delete_btn.callback = delete_message
-        self.add_item(delete_btn)
     async def on_timeout(self):
         if self.message:
             if self.ephemeral_msg:
                 await self.message.delete()
             else:
                 await self.message.edit(view=None)
+    def enable_all_buttons(self):
+        for b in self.children:
+            b.disabled=False
+    def add_item(self, item):
+        ret = super().add_item(item)
+        unordered = [c for c in self.children]
+        self.clear_items()
+        for i in sorted(unordered, key = lambda x: x.label or 'zzzzzzzzzz'):
+            super().add_item(i)
+        return ret
+    def clear_buttons(self):
+        ''' remove all buttons except the delete button '''
+        delbtn = [x for x in self.children if x.custom_id == 'delete'][0]
+        self.clear_items()
+        if delbtn:
+            self.add_item(delbtn)
 def char_to_emoji(letter):
     return chr(127365 + ord(letter.lower()))
 class Quality(Enum):
@@ -138,7 +147,6 @@ class BotWithReactions(commands.Bot):
         if ((len(args)<2) or not args[1] == self.DEFAULT_FAILURE_MSG):
             if not view:
                 view = restrictedView(ctx)
-            await view.make_deletable()
             sent_msg = await self.send_message(*args, code_block=code_block, view=view, **kwargs)
             view.message = sent_msg
         else:
@@ -424,9 +432,8 @@ async def multiple_choice_view(ctx, data, func, edit_func=None):
         button = discord.ui.Button(label=data[i]['name'])
         async def show_item(interaction,idx=i):
             await interaction.response.defer()
-            view.clear_items()
+            view.clear_buttons()
             view.ephemeral_msg = False
-            await view.make_deletable()
             if edit_func:
                 await edit_func(data[idx],ctx,interaction)
             else:
@@ -537,13 +544,16 @@ class Info(commands.Cog):
         for k,v in pages.items():
             button = discord.ui.Button(style=discord.ButtonStyle.primary,label=k)
             view.add_item(button)
-            async def swap_to(interaction, key = k):
+            async def swap_to(interaction, key = k, btn=button):
                 await interaction.response.defer()
+                view.enable_all_buttons()
+                btn.disabled=True
                 await interaction.edit_original_message(content = None, embed = pages[key], view=view)
             button.callback = swap_to
+            if k == QUAL_TO_EMOJI[Quality.NORMAL]:
+                button.disabled = True
         if len(pages) == 1:
-            view.clear_items()
-        await view.make_deletable()
+            view.clear_buttons()
         if interaction:
             await interaction.edit_original_message(content=None,embed=pages[QUAL_TO_EMOJI[Quality.NORMAL]], view=view)
         else:
