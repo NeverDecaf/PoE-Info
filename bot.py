@@ -638,7 +638,7 @@ def _create_currency_embed(data):
         description=_strip_html_tags(stats_string),
         title=data['name'].strip(),
         type='rich',color=0x638000,
-        timestamp = data['timestamp'].replace(tzinfo = datetime.timezone.utc))
+        timestamp = data['timestamp'].replace(tzinfo = datetime.timezone.utc) if data['timestamp'] else None)
     if 'icon' in data.keys() and data['icon']:
         e.set_thumbnail(url=data['icon'].replace(' ','%20'))
     return e
@@ -690,7 +690,7 @@ def _create_unique_embed(data):
         description=_strip_html_tags(stats_string),
         title='\n'.join((data['name'].strip(),data['baseitem'].strip())),
         type='rich',color=0xaf6025,
-        timestamp = data['timestamp'].replace(tzinfo = datetime.timezone.utc))
+        timestamp = data['timestamp'].replace(tzinfo = datetime.timezone.utc) if data['timestamp'] else None)
     if 'icon' in data.keys() and data['icon']:
         e.set_thumbnail(url=data['icon'])
     elif 'image_url' in data.keys() and data['image_url']:
@@ -815,7 +815,7 @@ def _create_gem_embed(data, quality=Quality.NORMAL):
     e = discord.Embed(url=f"{WIKI_BASE}{data['name'].replace(' ','_')}",
         title=data['name'],
         type='rich',color=gemcolor,
-        timestamp = data['timestamp'].replace(tzinfo = datetime.timezone.utc))
+        timestamp = data['timestamp'].replace(tzinfo = datetime.timezone.utc) if data['timestamp'] else None)
     e.add_field(name=data['tags'],value=_strip_html_tags(stats_string),inline=False)
 
     if 'icon' in data.keys() and data['icon']:
