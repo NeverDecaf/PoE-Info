@@ -70,7 +70,7 @@ class restrictedView(discord.ui.View):
         return ret
     def clear_buttons(self):
         ''' remove all buttons except the delete button '''
-        delbtn = [x for x in self.children if x.custom_id == 'delete'][0]
+        delbtn = next(iter([x for x in self.children if x.custom_id == 'delete']),None)
         self.clear_items()
         if delbtn:
             self.add_item(delbtn)
@@ -475,7 +475,6 @@ class Info(commands.Cog):
             e = _create_unique_embed(data[0])
             await bot.send_deletable_message(ctx, ctx.message.channel, embed=e)
             return
-        
         data = bot.db.get_data('unique_items',item,league)
         if not data:
             data = bot.db.get_data('unique_items',item,league,search_by_baseitem=True)
@@ -638,7 +637,8 @@ def _create_currency_embed(data):
     e = discord.Embed(url=f"{WIKI_BASE}{data['name'].replace(' ','_')}",
         description=_strip_html_tags(stats_string),
         title=data['name'].strip(),
-        type='rich',color=0x638000)
+        type='rich',color=0x638000,
+        timestamp = data['timestamp'].replace(tzinfo = datetime.timezone.utc))
     if 'icon' in data.keys() and data['icon']:
         e.set_thumbnail(url=data['icon'].replace(' ','%20'))
     return e
@@ -689,7 +689,8 @@ def _create_unique_embed(data):
     e = discord.Embed(url=f"{WIKI_BASE}{data['name'].replace(' ','_')}",
         description=_strip_html_tags(stats_string),
         title='\n'.join((data['name'].strip(),data['baseitem'].strip())),
-        type='rich',color=0xaf6025)
+        type='rich',color=0xaf6025,
+        timestamp = data['timestamp'].replace(tzinfo = datetime.timezone.utc))
     if 'icon' in data.keys() and data['icon']:
         e.set_thumbnail(url=data['icon'])
     elif 'image_url' in data.keys() and data['image_url']:
@@ -813,7 +814,8 @@ def _create_gem_embed(data, quality=Quality.NORMAL):
         
     e = discord.Embed(url=f"{WIKI_BASE}{data['name'].replace(' ','_')}",
         title=data['name'],
-        type='rich',color=gemcolor)
+        type='rich',color=gemcolor,
+        timestamp = data['timestamp'].replace(tzinfo = datetime.timezone.utc))
     e.add_field(name=data['tags'],value=_strip_html_tags(stats_string),inline=False)
 
     if 'icon' in data.keys() and data['icon']:
@@ -824,7 +826,7 @@ def _create_gem_embed(data, quality=Quality.NORMAL):
             e.add_field(name='Per 1% Quality:',value=bold_nums.sub(r'**\1**', '{}\n\n{}'.format(qual_bonus,data['stat_text']).replace('<br>','\n')).replace('****',''),inline=False)
 
     if not data['primary_att'].lower() == 'none':
-        e.set_footer(text=data['primary_att'])
+        e.set_footer(text=data['primary_att'].capitalize())
     else:
         e.set_footer(text='Colorless')
     return e

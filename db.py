@@ -17,15 +17,16 @@ class PoeDB:
 
     def __init__(self,ro=False,dbfile="poedb.sqlite"):
         self.db=dbfile
+        self.ro = ro
         self._connect(ro)
         self._create_tables()
         self.scraper = cloudscraper.create_scraper()
     
     def _connect(self, ro):
         if ro:
-            self.conn=sqlite3.connect('file:%s?mode=ro'%self.db, uri=True)
+            self.conn=sqlite3.connect('file:%s?mode=ro'%self.db, uri=True, detect_types=sqlite3.PARSE_DECLTYPES)
         else:
-            self.conn=sqlite3.connect(self.db)
+            self.conn=sqlite3.connect(self.db, detect_types=sqlite3.PARSE_DECLTYPES)
         self.conn.row_factory = sqlite3.Row
         def _trim_variant(itemname):
             return re.sub(' ?\([^)]*\)','',itemname)
@@ -52,6 +53,28 @@ class PoeDB:
                  (id integer, name text, icon text, chaosValue real, exaltedValue real, itemClass integer, league text, PRIMARY KEY (id,league))''')
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS ninja_currency_data
                  (id integer, name text, icon text, chaosValue real, league text, PRIMARY KEY (id,league))''')
+        # add timestamp triggers to poe.ninja tables
+        for table in ('ninja_currency_data','ninja_data'):
+            try:
+                self.cursor.execute(f'''ALTER TABLE {table} ADD COLUMN timestamp timestamp DEFAULT 0''')
+                self.cursor.execute(f'''UPDATE {table} SET timestamp = datetime('now') where timestamp = 0''')
+            except sqlite3.OperationalError:
+                pass
+            try:
+                self.cursor.execute(f'''CREATE TRIGGER {table}_inserttime AFTER INSERT ON {table}
+                begin
+                update {table} set timestamp=datetime('now') where id = new.id;
+                end''')
+            except sqlite3.OperationalError:
+                pass
+            try:
+                self.cursor.execute(f'''CREATE TRIGGER {table}_updatetime AFTER UPDATE ON {table}
+                begin
+                update {table} set timestamp=datetime('now') where id = old.id;
+                end''')
+            except sqlite3.OperationalError:
+                pass
+                
         self.conn.commit()
 
     def add_item(self,data,table='unique_items'):
