@@ -181,7 +181,7 @@ class BotWithReactions(commands.Bot):
                 self.REACTIONBUTTONS.pop(key,None)
                 try:
                     await self.remove_all_reactions(msg,emoji)
-                except discord.errors.NotFound:
+                except discord.NotFound:
                     pass # this one means the message/reaction was deleted already so no big deal just ignore
             if new_author:
                 await callback(msg,new_author,remove,*data,**kwargs)
@@ -198,7 +198,7 @@ class BotWithReactions(commands.Bot):
                 self.REACTIONBUTTONS.pop(key,None)
                 try:
                     await self.remove_all_reactions(msg,emoji)
-                except discord.errors.NotFound:
+                except discord.NotFound:
                     pass # this one means the message/reaction was deleted already so no big deal just ignore
         for msg in list(self.EMBEDPAGES.keys()):
             datediff = (datetime.datetime.now(datetime.timezone.utc) - msg.created_at)
@@ -207,7 +207,7 @@ class BotWithReactions(commands.Bot):
                 for emoji in pages:
                     try:
                         await self.remove_all_reactions(msg,emoji)
-                    except discord.errors.NotFound:
+                    except discord.NotFound:
                         pass # this one means the message/reaction was deleted already so no big deal just ignore
     async def obtain_user(self,uid):
         ret = self.get_user(uid)
@@ -281,7 +281,7 @@ class BotWithReactions(commands.Bot):
                     await r.clear()
                 except:
                     await r.remove(self.user)
-            except discord.errors.Forbidden:
+            except discord.Forbidden:
                 'missing permission to remove emojis'
     async def remove_reaction(self, msg, emo, user):
         ''' for backwards compatibility '''

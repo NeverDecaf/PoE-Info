@@ -58,7 +58,7 @@ class Utility(commands.Cog):
     async def on_guild_channel_pins_update(self, chan, last_pin):
         try:
             pins = await self.bot.pins_from(chan)
-        except (discord.errors.NotFound, discord.errors.Forbidden):
+        except (discord.NotFound, discord.Forbidden):
             'missing permissions'
             return
         if len(pins) >= DISCORD_PIN_LIMIT:
