@@ -41,8 +41,9 @@ DIGIT_EMOJI = ['\U00000031\U000020E3',
 class restrictedView(discord.ui.View):
     ephemeral_msg = False
     message = None
-    def __init__(self, ctx, *args, **kwargs):
+    def __init__(self, ctx, *args, sort_key = lambda x: x.label or 'zzzzzzzzzz', **kwargs):
         self.ctx = ctx
+        self.sort_key = sort_key
         return super().__init__(*args,timeout=MESSAGE_BUTTON_TIMEOUT,**kwargs)
     @discord.ui.button(style=discord.ButtonStyle.red,emoji='✖',custom_id="delete")
     async def delete_callback(self, button, interaction):
@@ -65,7 +66,7 @@ class restrictedView(discord.ui.View):
         ret = super().add_item(item)
         unordered = [c for c in self.children]
         self.clear_items()
-        for i in sorted(unordered, key = lambda x: x.label or 'zzzzzzzzzz'):
+        for i in sorted(unordered, key = self.sort_key):
             super().add_item(i)
         return ret
     def clear_buttons(self):
@@ -497,16 +498,42 @@ class Info(commands.Cog):
         if difficulty == 'merc':
             difficulty = 'merciless'
         today = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d')
-        r=bot.cursor.execute('select img_url from daily_labs where diff=? and date=?',(difficulty,today))
-        data = r.fetchone()
+        r=bot.cursor.execute('select diff,img_url from daily_labs where date=?',(today,))
+        data = r.fetchall()
         if not data:
             _cache_labs()
-            r=bot.cursor.execute('select img_url from daily_labs where diff=? and date=?',(difficulty,today))
-            data = r.fetchone()
+            r=bot.cursor.execute('select img_url from daily_labs where date=?',(today,))
+            data = r.fetchall()
         if not data:
             return await bot.send_failure_message(ctx.message.channel)
-        #'https://www.poelab.com/wp-content/labfiles/{}_{}.jpg'.format(datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d'), diff)
-        await bot.send_message(ctx.message.channel, data[0], code_block = False)
+        LABS = dict(data)#'https://www.poelab.com/wp-content/labfiles/{}_{}.jpg'.format(datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d'), diff)
+        LAB_EMBEDS = {}
+        for diff in LABS.keys():
+            e = discord.Embed(url='https://www.poelab.com/',
+            type='rich')
+            e.set_author(name='Provided by PoELab', url='https://www.poelab.com/', icon_url='https://www.poelab.com/wp-content/uploads/2019/01/cropped-favicon2.0-32x32.png')
+            e.set_image(url = LABS[diff])
+            LAB_EMBEDS[diff] = e
+            
+        def sort(k):
+            try:
+                return ('Normal','Cruel','Merciless','Uber').index(k.label)
+            except:
+                return 99999
+        view = restrictedView(ctx, sort_key = sort)
+        for k in LAB_EMBEDS.keys():
+            button = discord.ui.Button(style=discord.ButtonStyle.primary,label=k.capitalize())
+            view.add_item(button)
+            async def swap_to(interaction, key = k, btn=button):
+                await interaction.response.defer()
+                view.enable_all_buttons()
+                btn.disabled=True
+                await interaction.edit_original_message(content = None, embed = LAB_EMBEDS[key], view=view)
+            button.callback = swap_to
+            if k == difficulty:
+                button.disabled = True
+        await bot.send_message(ctx.message.channel, embed = LAB_EMBEDS[difficulty], code_block = False, view=view)
+        # await bot.send_message(ctx.message.channel, data[0], code_block = False)
             
     @commands.command(pass_context=True,aliases=['s'])
     async def skill(self, ctx, *skill_name: str):
