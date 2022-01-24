@@ -502,7 +502,7 @@ class Info(commands.Cog):
         data = r.fetchall()
         if not data:
             _cache_labs()
-            r=bot.cursor.execute('select img_url from daily_labs where date=?',(today,))
+            r=bot.cursor.execute('select diff,img_url from daily_labs where date=?',(today,))
             data = r.fetchall()
         if not data:
             return await bot.send_failure_message(ctx.message.channel)
