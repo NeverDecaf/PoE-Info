@@ -532,7 +532,8 @@ class Info(commands.Cog):
             button.callback = swap_to
             if k == difficulty:
                 button.disabled = True
-        await bot.send_message(ctx.message.channel, embed = LAB_EMBEDS[difficulty], code_block = False, view=view)
+        sent_msg = await bot.send_message(ctx.message.channel, embed = LAB_EMBEDS[difficulty], code_block = False, view=view)
+        view.message = sent_msg
         # await bot.send_message(ctx.message.channel, data[0], code_block = False)
             
     @commands.command(pass_context=True,aliases=['s'])
