@@ -38,6 +38,7 @@ DIGIT_EMOJI = ['\U00000031\U000020E3',
                 '\U00000037\U000020E3',
                 '\U00000038\U000020E3',
                 '\U00000039\U000020E3']
+SEARCH_LIMIT = 999
 class restrictedView(discord.ui.View):
     ephemeral_msg = False
     message = None
@@ -465,7 +466,7 @@ class Info(commands.Cog):
             if (len(itemname) + (ctx.invoked_with == 'us'))<2:
                 await bot.send_message(ctx.message.channel, 'usage: -us <key words>')
                 return
-            data = bot.db.unique_search_explicit(itemname[(ctx.invoked_with != 'us'):],league,limit=999)
+            data = bot.db.unique_search_explicit(itemname[(ctx.invoked_with != 'us'):],league,limit=SEARCH_LIMIT)
             if not data:
                 await bot.send_failure_message(ctx.message.channel)
                 return
@@ -476,9 +477,9 @@ class Info(commands.Cog):
             e = _create_unique_embed(data[0])
             await bot.send_deletable_message(ctx, ctx.message.channel, embed=e)
             return
-        data = bot.db.get_data('unique_items',item,league)
+        data = bot.db.get_data('unique_items',item,league,limit=SEARCH_LIMIT)
         if not data:
-            data = bot.db.get_data('unique_items',item,league,search_by_baseitem=True)
+            data = bot.db.get_data('unique_items',item,league,search_by_baseitem=True,limit=SEARCH_LIMIT)
             if not data:
                 await bot.send_failure_message(ctx.message.channel)
                 return
@@ -546,7 +547,7 @@ class Info(commands.Cog):
         item = ' '.join(skill_name)
         r=bot.cursor.execute('SELECT league FROM pricecheck WHERE channel=?',(ctx.message.channel.id,))
         league = (r.fetchone() or ('tmpStandard',))[0]
-        data = bot.db.get_data('skill_gems',item,league)
+        data = bot.db.get_data('skill_gems',item,league,limit=SEARCH_LIMIT)
         if not data:
             await bot.send_failure_message(ctx.message.channel)
             return
@@ -597,7 +598,7 @@ class Info(commands.Cog):
         item = ' '.join(currency_name)
         r=bot.cursor.execute('SELECT league FROM pricecheck WHERE channel=?',(ctx.message.channel.id,))
         league = (r.fetchone() or ('tmpStandard',))[0]
-        data = bot.db.get_currency(item,league)
+        data = bot.db.get_currency(item,league,limit=SEARCH_LIMIT)
         if not data:
             await bot.send_failure_message(ctx.message.channel)
             return
@@ -620,7 +621,7 @@ class Info(commands.Cog):
             if (len(skillname) + (ctx.invoked_with.endswith('s')))<2:
                 await bot.send_message(ctx.message.channel, 'usage: -ns <key words>')
                 return
-            data = bot.db.passive_search_description(skillname[(not ctx.invoked_with.endswith('s')):])
+            data = bot.db.passive_search_description(skillname[(not ctx.invoked_with.endswith('s')):],limit=SEARCH_LIMIT)
             if not data:
                 await bot.send_failure_message(ctx.message.channel)
                 return
@@ -631,7 +632,7 @@ class Info(commands.Cog):
             await bot.send_deletable_message(ctx, ctx.message.channel, embed=e)
             return
         
-        data = bot.db.get_data('passive_skills',name)
+        data = bot.db.get_data('passive_skills',name,limit=SEARCH_LIMIT)
         if not data:
             await bot.send_failure_message(ctx.message.channel)
             return
@@ -654,7 +655,7 @@ def _strip_html_tags(text):
     
 def _create_currency_embed(data):
     price = data['chaosValue']
-    exaltValue = bot.db.get_currency('Exalted Orb',data['league'], exact=True)[0]['chaosValue']
+    exaltValue = bot.db.get_currency('Exalted Orb',data['league'], exact=True,limit=SEARCH_LIMIT)[0]['chaosValue']
     chaos_to_spend = 20
     limit = math.ceil(chaos_to_spend/price)
     if data['chaosValue'] > exaltValue * 2:
