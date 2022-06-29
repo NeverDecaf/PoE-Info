@@ -223,12 +223,12 @@ class Utility(commands.Cog):
         thumb = None
         if pin.embeds:
             emb = pin.embeds[0]
-            if emb.thumbnail != discord.Embed.Empty:
+            if emb.thumbnail != None:
                 thumb = emb.thumbnail.url
             if not content:
-                if emb.title != discord.Embed.Empty:
+                if emb.title != None:
                     content = emb.title
-                elif emb.description != discord.Embed.Empty:
+                elif emb.description != None:
                     content = emb.description
         e = discord.Embed(
             description=content,
@@ -249,7 +249,7 @@ class Utility(commands.Cog):
         e.set_footer(text='#{}'.format(pin.channel.name))
         return e
 
-def setup(bot):
+async def setup(bot):
     bot.cursor.execute('''CREATE TABLE IF NOT EXISTS pins
              (source int PRIMARY KEY,
              dest int)''')
@@ -266,4 +266,4 @@ def setup(bot):
              (server int PRIMARY KEY,
              timezone text DEFAULT "UTC")''')
     bot.conn.commit()
-    bot.add_cog(Utility(bot))
+    await bot.add_cog(Utility(bot))

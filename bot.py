@@ -19,6 +19,7 @@ import math
 from urllib.parse import quote as urlquote
 from scrape_poe_wiki import get_lab_urls
 from enum import Enum
+from pathlib import Path
 import cloudscraper
 WIKI_BASE = 'https://www.poewiki.net/wiki/'
 abspath = os.path.abspath(__file__)
@@ -48,8 +49,9 @@ class restrictedView(discord.ui.View):
         return super().__init__(*args,timeout=MESSAGE_BUTTON_TIMEOUT,**kwargs)
     @discord.ui.button(style=discord.ButtonStyle.red,emoji='✖',custom_id="delete")
     async def delete_callback(self, button, interaction):
-        await interaction.response.defer()
-        await interaction.delete_original_message()
+        # await interaction.response.defer()
+        await self.message.delete()
+        # await interaction.delete_original_message()
     async def interaction_check(self, interaction):
         if interaction.user == self.ctx.message.author:
             return True
@@ -305,7 +307,9 @@ def admin_or_dm():
             return True
         raise commands.MissingPermissions('Administrator')
     return commands.check(predicate)
-bot = BotWithReactions(command_prefix='-', description='PoE Info.')
+intents = discord.Intents.default()
+intents.message_content = True
+bot = BotWithReactions(command_prefix='-', description='PoE Info.', intents = intents)
 
 @bot.listen()
 async def on_ready():
@@ -1014,6 +1018,8 @@ class backgroundTasks(commands.Cog):
     async def before_run(self):
         await self.bot.wait_until_ready()
         
+
+        
 if __name__ =='__main__':
     bot.db = db.PoeDB(ro=True)
     bot.conn = sqlite3.connect('announce.sqlitedb')
@@ -1052,14 +1058,20 @@ if __name__ =='__main__':
              (channel int PRIMARY KEY,
              league text)''')
     bot.conn.commit()
-    import cogs
-    from cogs import *
-    cogs.setup_all_cogs(bot)
-    bot.add_cog(Alerts())
-    bot.add_cog(Info())
-    bot.add_cog(Misc())
-    bot.add_cog(backgroundTasks(bot))
-    with open('token','r') as f:
-        bot.run(f.read())
+
+    async def load_extensions():
+        await bot.add_cog(Alerts())
+        await bot.add_cog(Info())
+        await bot.add_cog(Misc())
+        await bot.add_cog(backgroundTasks(bot))
+        for path in Path("./cogs").glob('*.py'):
+            await bot.load_extension(f"cogs.{path.stem}")
+
+    async def main():
+        async with bot:
+            await load_extensions()
+            with open('token','r') as f:
+                await bot.start(f.read())
+    asyncio.run(main())
 
 ##https://discord.com/oauth2/authorize?client_id=313788924151726082&scope=bot&permissions=0
