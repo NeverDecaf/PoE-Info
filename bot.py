@@ -40,6 +40,7 @@ DIGIT_EMOJI = ['\U00000031\U000020E3',
                 '\U00000038\U000020E3',
                 '\U00000039\U000020E3']
 SEARCH_LIMIT = 999
+MAX_EMBED_VALUE_LEN = 1024
 class restrictedView(discord.ui.View):
     ephemeral_msg = False
     message = None
@@ -736,7 +737,7 @@ def _create_unique_embed(data):
             expl_text = '{}'.format(table_header.group(1))
         else:
             expl_text = (_strip_html_tags(bold_nums.sub(r'**\1**', expl_mods)) or '--')
-        e.add_field(name=(_strip_html_tags(bold_nums.sub(r'**\1**', str(data['impl']))) or '--').replace('****',''),value=expl_text.replace('****',''),inline=False)
+        e.add_field(name=(_strip_html_tags(bold_nums.sub(r'**\1**', str(data['impl']))) or '--').replace('****',''),value=expl_text.replace('****','')[:MAX_EMBED_VALUE_LEN],inline=False)
     if data['physdps'] or data['eledps']:
         s=''
         if data['physdps']:

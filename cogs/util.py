@@ -42,8 +42,11 @@ class Utility(commands.Cog):
         for row in r.fetchall():
             'announce and delete.'
             try:
-                await self.bot.send_message(self.bot.get_channel(row[2]), '<@{}> {}'.format(row[0],row[5]),code_block=False)
-            except:
+                ch_id = self.bot.get_channel(row[2]) 
+                if not ch_id:
+                    ch_id = await self.bot.fetch_channel(row[2])
+                await self.bot.send_message(ch_id, '<@{}> {}'.format(row[0],row[5]),code_block=False)
+            except Exception as e:
                 'channel missing or bot is blocked'
             finally:
                 try:

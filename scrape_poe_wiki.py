@@ -34,6 +34,12 @@ since the style variants ingame all have the same name, we want to filter these 
 put in a manually prepared version that covers all styles in one overview. 
 """
 
+regex_wiki_table = re.compile(r'<table[^>]*><tr[^>]*>([^<]*).*</table[^>]*>',re.DOTALL|re.I)
+"""
+matches table element used sometimes in expl and impl
+capture group 1 is the first row in the table, usually a descriptive name.
+"""
+
 regex_wiki_markup = re.compile(r'<[^>]*class="[^"]*"[^>]*><([^>]*)></[^>]*>')
 regex_wiki_styling = re.compile(r'< ?em[^>]*class="[^"]*"[^>]*>([^>]*)</[^>]*>')
 
@@ -44,6 +50,7 @@ def remove_wiki_formats(text):
         text = regex_wiki_markup.sub(r'**\1**', text) # remove wiki markup, covers veiled mods and corrupted text, will also bold for embed
         text = regex_wiki_styling.sub(r'\1', text) # replace normal styling that uses <em> tags.
         text = text.replace('&#60;', '<').replace('&#62;', '>')
+        text = regex_wiki_table.sub(r'\1', text)
         return text
 
 def remove_hidden_mods(mod_list):
