@@ -41,6 +41,11 @@ DIGIT_EMOJI = ['\U00000031\U000020E3',
                 '\U00000039\U000020E3']
 SEARCH_LIMIT = 999
 MAX_EMBED_VALUE_LEN = 1024
+
+SMALL_CURRENCY = 'chaosValue'
+SMALL_CURRENCY_LABEL = 'c'
+LARGE_CURRENCY = 'divineValue'
+LARGE_CURRENCY_LABEL = 'div'
 class restrictedView(discord.ui.View):
     ephemeral_msg = False
     message = None
@@ -659,15 +664,15 @@ def _strip_html_tags(text):
     return re.sub(r'<(?!One to)[^>]+>','',re.sub(r'<(br|tr|hr)[^>]+>','\n',re.sub(r' \| ','\n',text)),flags=re.I)
     
 def _create_currency_embed(data):
-    price = data['chaosValue']
-    exaltValue = bot.db.get_currency('Exalted Orb',data['league'], exact=True,limit=SEARCH_LIMIT)[0]['chaosValue']
+    price = data[SMALL_CURRENCY]
+    exaltValue = bot.db.get_currency('Exalted Orb',data['league'], exact=True,limit=SEARCH_LIMIT)[0][SMALL_CURRENCY]
     chaos_to_spend = 20
     limit = math.ceil(chaos_to_spend/price)
-    if data['chaosValue'] > exaltValue * 2:
-        stats_string = 'Est. Price: **{}**c\napprox. **{:.1f}**ex'.format(price, price/exaltValue)
+    if data[SMALL_CURRENCY] > exaltValue * 2:
+        stats_string = f'Est. Price: **{price}**{SMALL_CURRENCY_LABEL}\napprox. **{price/exaltValue:.1f}**{LARGE_CURRENCY_LABEL}'
     else:
-        frac = Fraction(data['chaosValue']).limit_denominator(int(limit))
-        stats_string = 'Est. Price: **{}**c\napprox. **{}** : **{}**c'.format(price,frac.denominator,frac.numerator)
+        frac = Fraction(data[SMALL_CURRENCY]).limit_denominator(int(limit))
+        stats_string = f'Est. Price: **{price}**{SMALL_CURRENCY_LABEL}\napprox. **{frac.denominator}** : **{frac.numerator}**{SMALL_CURRENCY_LABEL}'
     e = discord.Embed(url=f"{WIKI_BASE}{data['name'].replace(' ','_')}",
         description=_strip_html_tags(stats_string),
         title=data['name'].strip(),
@@ -692,11 +697,11 @@ def _create_unique_embed(data):
         return ''
     bold_nums = re.compile('(\(?-?(?:\d+(?:-|(?: to )))?\d*\.?\d+\)?%?)')
     bold_nums = re.compile('(\(?-?(?:\d*\.?\d+(?:-|(?: to )))?\d*\.?\d+\)?%?)')
-    if 'chaosValue' in data.keys() and 'exaltedValue' in data.keys() and data['chaosValue'] is not None and data['exaltedValue'] is not None:
-        if data['exaltedValue'] > 1:
-            stats_string = 'Est. Price: {0:.1f}ex\n'.format(data['exaltedValue'])
+    if SMALL_CURRENCY in data.keys() and LARGE_CURRENCY in data.keys() and data[SMALL_CURRENCY] is not None and data[LARGE_CURRENCY] is not None:
+        if data[LARGE_CURRENCY] > 1:
+            stats_string = f'Est. Price: {data[LARGE_CURRENCY]:.1f}{LARGE_CURRENCY_LABEL}\n'
         else:
-            stats_string = 'Est. Price: {0:.0f}c\n'.format(data['chaosValue'])
+            stats_string = f'Est. Price: {data[SMALL_CURRENCY]:.0f}{SMALL_CURRENCY_LABEL}\n'
     else:
         stats_string = ''
     # leading \n are automatically removed by discord. you can use this to your advantage if you're careful how you place these.
@@ -758,17 +763,17 @@ def _create_gem_embed(data, quality=Quality.NORMAL):
         return ''
     bold_nums = re.compile('(\(?-?(?:\d*\.?\d+(?:-|(?: to )))?\d*\.?\d+\)?%?)')
 
-    if 'chaosValue' in data.keys() and 'exaltedValue' in data.keys() and data['chaosValue'] is not None and data['exaltedValue'] is not None:
-        if data['exaltedValue'] > 1:
+    if SMALL_CURRENCY in data.keys() and LARGE_CURRENCY in data.keys() and data[SMALL_CURRENCY] is not None and data[LARGE_CURRENCY] is not None:
+        if data[LARGE_CURRENCY] > 1:
             if data['name'].startswith('Vaal '):
-                stats_string = '20/20 Price: {0:.1f}ex\n'.format(data['exaltedValue'])
+                stats_string = f'20/20 Price: {data[LARGE_CURRENCY]:.1f}{LARGE_CURRENCY_LABEL}\n'
             else:
-                stats_string = '20q Price: {0:.1f}ex\n'.format(data['exaltedValue'])
+                stats_string = f'20q Price: {data[LARGE_CURRENCY]:.1f}{LARGE_CURRENCY_LABEL}\n'
         else:
             if data['name'].startswith('Vaal '):
-                stats_string = '20/20 Price: {0:.0f}c\n'.format(data['chaosValue'])
+                stats_string = f'20/20 Price: {data[SMALL_CURRENCY]:.0f}{SMALL_CURRENCY_LABEL}\n'
             else:
-                stats_string = '20q Price: {0:.0f}c\n'.format(data['chaosValue'])
+                stats_string = f'20q Price: {data[SMALL_CURRENCY]:.0f}{SMALL_CURRENCY_LABEL}\n'
     else:
         stats_string = ''
     if data['mana_multiplier']:

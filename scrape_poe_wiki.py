@@ -448,6 +448,7 @@ POE_NINJA_FIELDS = ['id',
                     'itemClass',
                     'chaosValue',
                     'exaltedValue',
+                    'divineValue'
                     ]
                     
 def get_ninja_prices(league='tmpStandard'):
@@ -492,7 +493,11 @@ def get_ninja_prices(league='tmpStandard'):
         return data
 def get_ninja_rates(league='tmpStandard'):
         '''use poe.ninja api to get currency prices'''
-        itemtypes = ['DivinationCard','Oil','Scarab','Fossil','Resonator','Essence','Prophecy']
+        itemtypes = ['DivinationCard','Oil','Scarab','Fossil','Resonator','Essence'] 
+        ''' 
+        omitted:
+        Prophecy
+        '''
         currencytypes = ['Currency','Fragment']
         '''
         omitted categories:

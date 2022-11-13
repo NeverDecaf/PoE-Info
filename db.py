@@ -74,7 +74,10 @@ class PoeDB:
                 end''')
             except sqlite3.OperationalError:
                 pass
-                
+        try:
+            self.cursor.execute(f'''ALTER TABLE ninja_data ADD COLUMN divineValue real''')
+        except sqlite3.OperationalError:
+            pass
         self.conn.commit()
 
     def add_item(self,data,table='unique_items'):
