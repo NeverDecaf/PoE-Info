@@ -149,7 +149,7 @@ SKILL_GEM_VARIABLE_FIELDS={
         }
 SKILL_GEM_PROPERTY_MAPPING=dict(
         {
-                #skill_gems fields:
+                # skill_gems fields:
                 'skill_gems._pageName':'name',
                 'skill_gems.gem_description':'gem_desc',
                 'skill_gems.support_gem_letter':'support_letter',
@@ -158,11 +158,9 @@ SKILL_GEM_PROPERTY_MAPPING=dict(
                 'skill_gems.dexterity_percent':'dex_percent',
                 'skill_gems.intelligence_percent':'int_percent',
                 'skill_gems.strength_percent':'str_percent',
-                #skill fields:
-                'skill_levels.attack_speed_multiplier':'attack_speed_multiplier',
+                # skill fields:
                 'skill.skill_icon':'image_url',
                 # 'skill.has_reservation_mana_cost':'is_res',
-                'skill.quality_stat_text':'qual_bonus',
                 'skill.item_class_restriction':'item_restriction',
                 'skill.max_level':'max_level',
                 'skill.projectile_speed':'proj_speed',
@@ -175,6 +173,10 @@ SKILL_GEM_PROPERTY_MAPPING=dict(
                 'skill.radius_tertiary_description':'radius_3_desc',
                 'skill.html':'html',
                 'skill.stat_text':'stat_text',
+                # skill_levels fields:
+                'skill_levels.attack_speed_multiplier':'attack_speed_multiplier',
+                # skill_quality fields:
+                'skill_quality.stat_text':'qual_bonus',
         },
         **SKILL_GEM_VARIABLE_FIELDS)
 
@@ -193,7 +195,7 @@ def scrape_skill_gems(limit=100000):
         keyed_results = {}
 
         while rowindex<limit:
-                query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_gems,skill,skill_levels&join_on=skill_gems._pageName=skill._pageName,skill_gems._pageName=skill_levels._pageName&fields='+\
+                query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_gems,skill,skill_levels,skill_quality&join_on=skill_gems._pageName=skill._pageName,skill_gems._pageName=skill_levels._pageName,skill_gems._pageName=skill_quality._pageName&fields='+\
                 ','.join(['='.join((k,v)) for k,v in SKILL_GEM_PROPERTY_MAPPING.items()])+',skill_gems._rowID=rowid,skill_levels.level=level&where=skill_gems._rowID>{} AND (skill_levels.level=skill.max_level OR skill_levels.level<2)&order_by=skill_gems._rowID&limit={}'.format(last_rowid+1,query_limit)
                 api_results = []
                 for i in range(3):

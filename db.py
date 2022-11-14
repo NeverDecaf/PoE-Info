@@ -32,6 +32,8 @@ class PoeDB:
             return re.sub(' ?\([^)]*\)','',itemname)
         self.conn.create_function('trim_variant',1,_trim_variant)
         self.cursor=self.conn.cursor()
+        # self.cursor.execute('pragma short_column_names=OFF;')
+        # self.cursor.execute('PRAGMA full_column_names=ON;')
     
     def _create_tables(self):
         field_names = scrape_poe_wiki.UNIQUE_ITEM_PROPERTY_MAPPING.values()
@@ -99,13 +101,45 @@ class PoeDB:
         self.conn.commit()
         
     def get_data(self,tablename,searchname,league = None,limit = 9, search_by_baseitem = False):
-        query = '''SELECT *,q_n.q_stat_text as qual_bonus_normal,q_a.q_stat_text as qual_bonus_anomalous,q_d.q_stat_text as qual_bonus_divergent,q_p.q_stat_text as qual_bonus_phantasmal FROM {} 
-        left join skill_quality q_n on {}.name=q_n.name AND q_n.q_type=1
-        left join skill_quality q_a on {}.name=q_a.name AND q_a.q_type=2
-        left join skill_quality q_d on {}.name=q_d.name AND q_d.q_type=3
-        left join skill_quality q_p on {}.name=q_p.name AND q_p.q_type=4
-        left join ninja_data on trim_variant({}.name)=ninja_data.name AND ninja_data.league=? COLLATE NOCASE WHERE {}.{} COLLATE NOCASE LIKE "%"||?||"%" {} GROUP BY {}.name ORDER BY MAX(chaosValue) LIMIT {}'''.format(tablename,tablename,tablename,tablename,tablename,tablename,tablename,'baseitem' if search_by_baseitem else 'name', 'AND drop_enabled' if league not in ('Standard','Hardcore') and tablename=='unique_items' else '', tablename, limit)
+        query = '''SELECT * FROM {} 
+        left join ninja_data 
+        on trim_variant({}.name)=ninja_data.name AND ninja_data.league=? 
+        COLLATE NOCASE WHERE {}.{} COLLATE NOCASE LIKE "%"||?||"%" {} 
+        GROUP BY {}.name 
+        ORDER BY MAX(chaosValue) 
+        LIMIT {}'''.format(tablename,tablename,tablename,'baseitem' if search_by_baseitem else 'name', 'AND drop_enabled' if league not in ('Standard','Hardcore') and tablename=='unique_items' else '', tablename, limit)
         res=self.cursor.execute(query,(league,searchname.lower(),))
+        ret = res.fetchall()
+        if len(ret)>1:
+            for entry in ret:
+                if entry['name'].lower()==searchname.lower():
+                    return [entry]
+        return ret
+        
+    # split off into its own function thanks to alt quality.
+    def get_skill_data(self,tablename,searchname,league = None,limit = 9, search_by_baseitem = False):
+        price_data_to_keep = ['chaosValue','exaltedValue','divineValue']
+        query = f'''SELECT *,
+        q_n.q_stat_text as qual_bonus_normal,
+        q_a.q_stat_text as qual_bonus_anomalous,
+        q_d.q_stat_text as qual_bonus_divergent,
+        q_p.q_stat_text as qual_bonus_phantasmal,
+        {','.join([i+'.'+k+' as '+i+'_'+k for i in ('p_n','p_a','p_d','p_p') for k in price_data_to_keep])}
+        FROM {tablename} 
+        left join skill_quality q_n on trim({tablename}.name,'Vaal ')=q_n.name AND q_n.q_type=1
+        left join skill_quality q_a on trim({tablename}.name,'Vaal ')=q_a.name AND q_a.q_type=2
+        left join skill_quality q_d on trim({tablename}.name,'Vaal ')=q_d.name AND q_d.q_type=3
+        left join skill_quality q_p on trim({tablename}.name,'Vaal ')=q_p.name AND q_p.q_type=4
+        left join ninja_data p_n on {tablename}.name=p_n.name AND p_n.league=? COLLATE NOCASE
+        left join ninja_data p_a on 'Anomalous ' || {tablename}.name=p_a.name AND p_a.league=? COLLATE NOCASE
+        left join ninja_data p_d on 'Divergent ' || {tablename}.name=p_d.name AND p_d.league=? COLLATE NOCASE
+        left join ninja_data p_p on 'Phantasmal ' || {tablename}.name=p_p.name AND p_p.league=? COLLATE NOCASE
+        WHERE {tablename}.{'baseitem' if search_by_baseitem else 'name'} COLLATE NOCASE LIKE "%"||?||"%" 
+        {'AND drop_enabled' if league not in ('Standard','Hardcore') and tablename=='unique_items' else ''} 
+        GROUP BY {tablename}.name 
+        ORDER BY MAX(p_n.chaosValue) 
+        LIMIT {limit}'''
+        res=self.cursor.execute(query,(league,league,league,league,searchname.lower(),))
         ret = res.fetchall()
         if len(ret)>1:
             for entry in ret:

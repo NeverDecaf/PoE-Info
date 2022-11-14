@@ -97,6 +97,12 @@ QUAL_TO_DB_COL_NAME = {
     Quality.DIVERGENT : 'qual_bonus_divergent',
     Quality.PHANTASMAL : 'qual_bonus_phantasmal'
     }
+QUAL_TO_DB_COL_PREFIX = {
+    Quality.NORMAL : 'p_n',
+    Quality.ANOMALOUS : 'p_a',
+    Quality.DIVERGENT : 'p_d',
+    Quality.PHANTASMAL : 'p_p'
+    }
 QUAL_TO_EMOJI = {
     Quality.NORMAL : 'Superior',
     Quality.ANOMALOUS : 'Anomalous',
@@ -557,7 +563,7 @@ class Info(commands.Cog):
         item = ' '.join(skill_name)
         r=bot.cursor.execute('SELECT league FROM pricecheck WHERE channel=?',(ctx.message.channel.id,))
         league = (r.fetchone() or ('tmpStandard',))[0]
-        data = bot.db.get_data('skill_gems',item,league,limit=SEARCH_LIMIT)
+        data = bot.db.get_skill_data('skill_gems',item,league,limit=SEARCH_LIMIT)
         if not data:
             await bot.send_failure_message(ctx.message.channel)
             return
@@ -762,18 +768,19 @@ def _create_gem_embed(data, quality=Quality.NORMAL):
             return ', '+val+' '+stat
         return ''
     bold_nums = re.compile('(\(?-?(?:\d*\.?\d+(?:-|(?: to )))?\d*\.?\d+\)?%?)')
-
-    if SMALL_CURRENCY in data.keys() and LARGE_CURRENCY in data.keys() and data[SMALL_CURRENCY] is not None and data[LARGE_CURRENCY] is not None:
-        if data[LARGE_CURRENCY] > 1:
+    SMALL_CURRENCY_KEY = f'{QUAL_TO_DB_COL_PREFIX[quality]}_{SMALL_CURRENCY}'
+    LARGE_CURRENCY_KEY = f'{QUAL_TO_DB_COL_PREFIX[quality]}_{LARGE_CURRENCY}'
+    if SMALL_CURRENCY_KEY in data.keys() and LARGE_CURRENCY_KEY in data.keys() and data[SMALL_CURRENCY] is not None and data[LARGE_CURRENCY_KEY] is not None:
+        if data[LARGE_CURRENCY_KEY] > 1:
             if data['name'].startswith('Vaal '):
-                stats_string = f'20/20 Price: {data[LARGE_CURRENCY]:.1f}{LARGE_CURRENCY_LABEL}\n'
+                stats_string = f'20/20 Price: {data[LARGE_CURRENCY_KEY]:.1f}{LARGE_CURRENCY_LABEL}\n'
             else:
-                stats_string = f'20q Price: {data[LARGE_CURRENCY]:.1f}{LARGE_CURRENCY_LABEL}\n'
+                stats_string = f'20q Price: {data[LARGE_CURRENCY_KEY]:.1f}{LARGE_CURRENCY_LABEL}\n'
         else:
             if data['name'].startswith('Vaal '):
-                stats_string = f'20/20 Price: {data[SMALL_CURRENCY]:.0f}{SMALL_CURRENCY_LABEL}\n'
+                stats_string = f'20/20 Price: {data[SMALL_CURRENCY_KEY]:.0f}{SMALL_CURRENCY_LABEL}\n'
             else:
-                stats_string = f'20q Price: {data[SMALL_CURRENCY]:.0f}{SMALL_CURRENCY_LABEL}\n'
+                stats_string = f'20q Price: {data[SMALL_CURRENCY_KEY]:.0f}{SMALL_CURRENCY_LABEL}\n'
     else:
         stats_string = ''
     if data['mana_multiplier']:
