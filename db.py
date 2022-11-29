@@ -104,7 +104,7 @@ class PoeDB:
         query = '''SELECT * FROM {} 
         left join ninja_data 
         on trim_variant({}.name)=ninja_data.name AND ninja_data.league=? 
-        COLLATE NOCASE WHERE {}.{} COLLATE NOCASE LIKE "%"||?||"%" {} AND itemClass <> 9
+        COLLATE NOCASE WHERE {}.{} COLLATE NOCASE LIKE "%"||?||"%" {} AND COALESCE(itemClass,0) <> 9
         GROUP BY {}.name 
         ORDER BY MAX(chaosValue) 
         LIMIT {}'''.format(tablename,tablename,tablename,'baseitem' if search_by_baseitem else 'name', 'AND drop_enabled' if league not in ('Standard','Hardcore') and tablename=='unique_items' else '', tablename, limit)
