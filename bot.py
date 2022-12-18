@@ -46,6 +46,7 @@ SMALL_CURRENCY = 'chaosValue'
 SMALL_CURRENCY_LABEL = 'c'
 LARGE_CURRENCY = 'divineValue'
 LARGE_CURRENCY_LABEL = 'div'
+LARGE_CURRENCY_NAME = 'Divine Orb'
 class restrictedView(discord.ui.View):
     ephemeral_msg = False
     message = None
@@ -671,7 +672,7 @@ def _strip_html_tags(text):
     
 def _create_currency_embed(data):
     price = data[SMALL_CURRENCY]
-    exaltValue = bot.db.get_currency('Exalted Orb',data['league'], exact=True,limit=SEARCH_LIMIT)[0][SMALL_CURRENCY]
+    exaltValue = bot.db.get_currency(LARGE_CURRENCY_NAME,data['league'], exact=True,limit=SEARCH_LIMIT)[0][SMALL_CURRENCY]
     chaos_to_spend = 20
     limit = math.ceil(chaos_to_spend/price)
     if data[SMALL_CURRENCY] > exaltValue * 2:
