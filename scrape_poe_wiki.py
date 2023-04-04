@@ -134,7 +134,7 @@ SKILL_GEM_VARIABLE_FIELDS={
                 'skill_levels.intelligence_requirement':'int_requirement',
                 'skill_levels.level_requirement':'level_requirement',
                 # 'skill_levels.mana_cost':'mana_cost',
-                'skill_levels.mana_multiplier':'mana_multiplier',
+                'skill_levels.cost_multiplier':'mana_multiplier',
                 'skill_levels.stored_uses':'stored_uses',
                 'skill_levels.strength_requirement':'str_requirement',
                 'skill_levels.vaal_souls_requirement':'vaal_souls_requirement',
@@ -189,7 +189,7 @@ SKILL_QUALITY_PROPERTY_MAPPING={
                 'skill_quality.weight':'q_weight',
         }
 def scrape_skill_gems(limit=100000):
-        query_limit = 500
+        query_limit = 100
         rowindex = 0
         last_rowid = -1
         keyed_results = {}
@@ -206,9 +206,10 @@ def scrape_skill_gems(limit=100000):
                                 rj = r.json()
                                 api_results = [a['title'] for a in rj['cargoquery']]
                                 break
-                        except:
-                                print(rj)
+                        except Exception as e:
+                                print('error scraping skills with query:',query)#,rj)
                                 time.sleep(4)
+                                # raise
                 if not len(api_results):
                         break
                 for res in api_results:
@@ -569,11 +570,11 @@ def get_lab_urls(date):
                 ret.append(t)
     return ret
 if __name__ == '__main__':
-    print(get_ninja_rates())
+    # print(get_ninja_rates())
     # print(get_ninja_prices())
     # import datetime
     # print(get_lab_urls(datetime.datetime.utcnow().strftime('%Y-%m-%d')))
-    # print(scrape_skill_gems())
+    print(scrape_skill_gems())
     # print(scrape_skill_quality())
     # print(scrape_passive_skills())
     # print(scrape_unique_items())
