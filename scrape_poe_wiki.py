@@ -189,32 +189,72 @@ SKILL_QUALITY_PROPERTY_MAPPING={
                 'skill_quality.weight':'q_weight',
         }
 def scrape_skill_gems(limit=100000):
-        query_limit = 100
+        query_limit = 500
         rowindex = 0
         last_rowid = -1
         keyed_results = {}
-
+        
+        # query each skill separately to prevent results that are too long for mediawiki
         while rowindex<limit:
+            query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_gems&fields=skill_gems._pageName=name,skill_gems._rowID=rowid&where=skill_gems._rowID>{last_rowid+1}&limit={query_limit}'
+            api_results = []
+            for i in range(3):
+                rj=None
+                try:
+                    r = requests.get(query)
+                    r.encoding = 'utf-8'
+                    rj = r.json()
+                    api_results = [a['title'] for a in rj['cargoquery']]
+                    break
+                except Exception as e:
+                    print('error scraping skill names with query:',query)#,rj)
+                    print(r.headers)
+                    time.sleep(4)
+                    # exit()
+            if not len(api_results):
+                break
+            for res in api_results:
+                last_rowid = int(res['rowid'])
+                res.pop('rowid',None)
+                if res['name'] not in keyed_results:
+                    keyed_results[res['name']] = res
+            rowindex+=query_limit
+            time.sleep(3)
+        sk_names = list(keyed_results.keys())
+        
+        query_limit = 500
+        batch_size = 10
+        rowindex = 0
+        # last_rowid = -1
+        keyed_results = {}
+        
+        
+        
+        # print('TOTAL SKILL COUNT:',len(sk_names))
+        for start_index in range(0,len(sk_names),batch_size):
+        # while rowindex<limit:
+                # if the results of this query exceeds query_limit you are just screwed, so keep batch_size low.
                 query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_gems,skill,skill_levels,skill_quality&join_on=skill_gems._pageName=skill._pageName,skill_gems._pageName=skill_levels._pageName,skill_gems._pageName=skill_quality._pageName&fields='+\
-                ','.join(['='.join((k,v)) for k,v in SKILL_GEM_PROPERTY_MAPPING.items()])+',skill_gems._rowID=rowid,skill_levels.level=level&where=skill_gems._rowID>{} AND (skill_levels.level=skill.max_level OR skill_levels.level<2)&order_by=skill_gems._rowID&limit={}'.format(last_rowid+1,query_limit)
+                ','.join(['='.join((k,v)) for k,v in SKILL_GEM_PROPERTY_MAPPING.items()])+f''',skill_levels.level=level&where=(skill_levels.level=skill.max_level OR skill_levels.level<2) AND skill_gems._pageName IN ({",".join([f'"{a}"' for a in sk_names[start_index:start_index+batch_size]])})&limit={query_limit}'''
                 api_results = []
                 for i in range(3):
                         rj=None
                         try:
-                                r = requests.get(query)
-                                r.encoding = 'utf-8'
-                                rj = r.json()
-                                api_results = [a['title'] for a in rj['cargoquery']]
-                                break
+                            r = requests.get(query)
+                            r.encoding = 'utf-8'
+                            rj = r.json()
+                            api_results = [a['title'] for a in rj['cargoquery']]
+                            break
                         except Exception as e:
-                                print('error scraping skills with query:',query)#,rj)
-                                time.sleep(4)
-                                # raise
+                            print('error scraping skills with query:',query)#,rj)
+                            print(r.headers)
+                            time.sleep(4)
+                            # raise
                 if not len(api_results):
                         break
                 for res in api_results:
-                        last_rowid = int(res['rowid'])
-                        res.pop('rowid',None)
+                        # last_rowid = int(res['rowid'])
+                        # res.pop('rowid',None)
                         thislevel = int(res.pop('level',None))
                         if res['name'] not in keyed_results:
                                 keyed_results[res['name']] = res
@@ -229,9 +269,10 @@ def scrape_skill_gems(limit=100000):
                         elif thislevel == 1:
                                 #update with all non-null values
                                 keyed_results[res['name']].update({k:v for k,v in res.items() if v})
-                rowindex+=query_limit
+                # rowindex+=query_limit
                 time.sleep(3)
-                
+                break
+        # return keyed_results
         return keyed_results.values()
 
 def scrape_skill_quality(limit=50000):
@@ -575,6 +616,11 @@ if __name__ == '__main__':
     # import datetime
     # print(get_lab_urls(datetime.datetime.utcnow().strftime('%Y-%m-%d')))
     print(scrape_skill_gems())
+    # import pprint
+    # with open('skill_gems_test.txt','w') as f:
+        # res = scrape_skill_gems()
+        # pprint.pprint(res)
+        # pprint.pprint(res,f)
     # print(scrape_skill_quality())
     # print(scrape_passive_skills())
     # print(scrape_unique_items())
