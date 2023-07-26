@@ -170,15 +170,24 @@ class Utility(commands.Cog):
                 return
             p = ''
             for i,r in enumerate(res):
-                p+= '{}. <t:{}:f>: {}\n'.format(i,r[1],r[0])
+                p+= '{}. <t:{}:f>: {}\n'.format(i+1,r[1],r[0])
             await self.bot.send_message(ctx.message.channel, p, code_block=False)
         elif subcmd in ('delete','del'):
             if len(query)<2 or not re.match('^\d*$',query[1]):
                 await self.bot.send_message(ctx.message.channel, 'usage:\n-reminder del <index>')
                 return
+            reminder_index = int(query[1])-1
+            if reminder_index < 0:
+                await self.bot.send_message(ctx.message.channel, 'Invalid index. Use -reminder list to see all reminders.')
+                return
             r = self.bot.cursor.execute('SELECT creator,role,channel,server,datetime,message FROM reminders where creator = ? and server = ? ORDER by datetime ASC',(ctx.message.author.id,server_id))
             res = r.fetchall()
-            self.bot.cursor.execute('DELETE FROM reminders WHERE creator = ? and role = ? and channel = ? and server = ? and datetime = ? and message = ?', res[int(query[1])])
+            try:
+                res[reminder_index]
+            except IndexError:
+                await self.bot.send_message(ctx.message.channel, 'Invalid index. Use -reminder list to see all reminders.')
+                return
+            self.bot.cursor.execute('DELETE FROM reminders WHERE creator = ? and role = ? and channel = ? and server = ? and datetime = ? and message = ?', res[reminder_index])
             self.bot.conn.commit()
             await self.bot.send_message(ctx.message.channel, 'Reminder deleted.')
         elif subcmd in ('timezone','tz'):
