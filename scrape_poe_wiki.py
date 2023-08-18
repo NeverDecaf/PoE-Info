@@ -226,11 +226,11 @@ def scrape_skill_gems(limit=100000):
         batch_size = 10
         rowindex = 0
         # last_rowid = -1
-        keyed_results = {}
+        # keyed_results = {}
         
         
         
-        # print('TOTAL SKILL COUNT:',len(sk_names))
+        # print('TOTAL SKILL COUNT:',len(sk_names),'batch:',batch_size)
         for start_index in range(0,len(sk_names),batch_size):
         # while rowindex<limit:
                 # if the results of this query exceeds query_limit you are just screwed, so keep batch_size low.
@@ -271,7 +271,7 @@ def scrape_skill_gems(limit=100000):
                                 keyed_results[res['name']].update({k:v for k,v in res.items() if v})
                 # rowindex+=query_limit
                 time.sleep(3)
-                break
+                # break
         # return keyed_results
         return keyed_results.values()
 
