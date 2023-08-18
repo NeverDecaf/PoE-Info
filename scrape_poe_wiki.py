@@ -196,7 +196,7 @@ def scrape_skill_gems(limit=100000):
         
         # query each skill separately to prevent results that are too long for mediawiki
         while rowindex<limit:
-            query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_gems&fields=skill_gems._pageName=name,skill_gems._rowID=rowid&where=skill_gems._rowID>{last_rowid+1}&limit={query_limit}'
+            query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_gems&fields=skill_gems._pageName=name,skill_gems._rowID=rowid&where=skill_gems._rowID>{last_rowid+1}&order_by=skill_gems._rowID&limit={query_limit}'
             api_results = []
             for i in range(3):
                 rj=None
