@@ -346,7 +346,7 @@ UNIQUE_ITEM_PROPERTY_MAPPING={
         'armours.energy_shield_range_text':'es',
         'armours.evasion_range_text':'eva',
 
-        'jewels.item_limit':'jewellimit',
+        'jewels.jewel_limit':'jewellimit',
         'jewels.radius_html':'jewelradius',
 
         'flasks.charges_max_range_text':'flaskcharges',
@@ -615,7 +615,7 @@ if __name__ == '__main__':
     # print(get_ninja_prices())
     # import datetime
     # print(get_lab_urls(datetime.datetime.utcnow().strftime('%Y-%m-%d')))
-    print(scrape_skill_gems())
+    # print(scrape_skill_gems())
     # import pprint
     # with open('skill_gems_test.txt','w') as f:
         # res = scrape_skill_gems()
@@ -623,6 +623,6 @@ if __name__ == '__main__':
         # pprint.pprint(res,f)
     # print(scrape_skill_quality())
     # print(scrape_passive_skills())
-    # print(scrape_unique_items())
+    print(scrape_unique_items())
     
     # print(remove_wiki_formats(html.unescape('<em class="tc -mod">(278-321)</em>')))
