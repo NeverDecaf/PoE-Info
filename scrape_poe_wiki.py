@@ -426,7 +426,7 @@ def scrape_unique_items(limit=50000):
                         res.pop('rowid',None)
                         # print(res)
                         # remove_wiki_formats
-                        res.update({k:remove_wiki_formats(html.unescape(v)) for k,v in res.items()})
+                        res.update({k:remove_wiki_formats(html.unescape(v or '')) for k,v in res.items()})
                         # force add impl and expl
                         res['impl'] = res.get('impl','')
                         res['expl'] = res.get('expl','')
@@ -478,7 +478,7 @@ def scrape_passive_skills(limit=50000):
                 for res in api_results:
                         last_rowid = int(res['rowid'])
                         res.pop('rowid',None)
-                        res['desc'] = remove_wiki_formats(html.unescape(res.get('desc','')))
+                        res['desc'] = remove_wiki_formats(html.unescape(res.get('desc','') or ''))
                 full_results.extend(api_results)
                 rowindex+=query_limit
                 time.sleep(3)
@@ -622,7 +622,7 @@ if __name__ == '__main__':
         # pprint.pprint(res)
         # pprint.pprint(res,f)
     # print(scrape_skill_quality())
-    # print(scrape_passive_skills())
-    print(scrape_unique_items())
+    print(scrape_passive_skills())
+    # print(scrape_unique_items())
     
     # print(remove_wiki_formats(html.unescape('<em class="tc -mod">(278-321)</em>')))
