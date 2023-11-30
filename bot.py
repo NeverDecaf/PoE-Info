@@ -456,7 +456,8 @@ async def multiple_choice_view(ctx, data, func, edit_func=None):
             if edit_func:
                 await edit_func(data[idx],ctx,interaction)
             else:
-                await interaction.edit_original_message(content = None, embed = func(data[idx]), view=view)
+                
+                await interaction.edit_original_response(content = None, embed = func(data[idx]), view=view)
         button.callback = show_item
         view.add_item(button)
     sent_msg = await bot.send_deletable_message(ctx,ctx.message.channel, f'Multiple results, showing {min(len(data),SEARCH_REACTION_LIMIT)}/{len(data)}.', view=view)
@@ -546,7 +547,7 @@ class Info(commands.Cog):
                 await interaction.response.defer()
                 view.enable_all_buttons()
                 btn.disabled=True
-                await interaction.edit_original_message(content = None, embed = LAB_EMBEDS[key], view=view)
+                await interaction.edit_original_response(content = None, embed = LAB_EMBEDS[key], view=view)
             button.callback = swap_to
             if k == difficulty:
                 button.disabled = True
@@ -578,7 +579,7 @@ class Info(commands.Cog):
         # msg isnt reliable, could be either the initial message or the response depending on context, use edit_msg instead
         view = restrictedView(ctx)
         if interaction:
-            await interaction.edit_original_message(view=None)
+            await interaction.edit_original_response(view=None)
         
         pages = {}
         for k,v in QUAL_TO_DB_COL_NAME.items():
@@ -593,14 +594,14 @@ class Info(commands.Cog):
                 await interaction.response.defer()
                 view.enable_all_buttons()
                 btn.disabled=True
-                await interaction.edit_original_message(content = None, embed = pages[key], view=view)
+                await interaction.edit_original_response(content = None, embed = pages[key], view=view)
             button.callback = swap_to
             if k == QUAL_TO_EMOJI[Quality.NORMAL]:
                 button.disabled = True
         if len(pages) == 1:
             view.clear_buttons()
         if interaction:
-            await interaction.edit_original_message(content=None,embed=pages[QUAL_TO_EMOJI[Quality.NORMAL]], view=view)
+            await interaction.edit_original_response(content=None,embed=pages[QUAL_TO_EMOJI[Quality.NORMAL]], view=view)
         else:
             sent_msg = await bot.send_message(ctx.message.channel, embed=pages[QUAL_TO_EMOJI[Quality.NORMAL]], view=view)
             view.message = sent_msg
