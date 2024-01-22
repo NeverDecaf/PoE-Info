@@ -139,7 +139,7 @@ class Utility(commands.Cog):
         except UnknownTimeZoneError:
             return False
     @commands.command(pass_context=True, aliases = ['remind','remindme'], invoke_without_command=True)
-    async def reminder(self, ctx, *query: str):
+    async def reminder(self, ctx, *, arg):
         '''<datetime/timedelta> <message>
     Set a reminder; for example:
     -reminder 3pm June 10 hello
@@ -148,6 +148,7 @@ class Utility(commands.Cog):
     reminder list - list all reminders for yourself
     reminder delete <index> - delete specified reminder
     reminder timezone <tz> - set timezone for date reminders'''
+        query = arg.split()
         if not query:
             raise commands.BadArgument()
         helpmsg = 'usage:\n-reminder <datetime/timedelta> <message>'
