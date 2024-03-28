@@ -997,6 +997,7 @@ class backgroundTasks(commands.Cog):
 
     @tasks.loop(seconds=60.0)
     async def forum_announcements(self):
+        return # rate limit changed so this results in ban
         announce_types = [('forumannounce',partial(scrape_forum)),
                           ('patchnotes',partial(scrape_forum,'https://www.pathofexile.com/forum/view-forum/patch-notes','patch_notes','Forum - Patch Notes')),
                            ('dailydeal',partial(scrape_deals))]
