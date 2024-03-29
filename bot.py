@@ -901,7 +901,6 @@ async def scrape_forum(section = 'https://www.pathofexile.com/forum/view-forum/n
     threadnums = [a.split('/')[-1] for a in urls]
     threads = list(zip(titles,urls,threadnums))
     announces = []
-    
     r=bot.cursor.execute('SELECT threadnum FROM `{}` WHERE threadnum IN ({})'.format(table, ','.join([x[2] for x in threads])))
     already_parsed = [x[0] for x in r.fetchall()]
 
@@ -991,9 +990,9 @@ class backgroundTasks(commands.Cog):
     def cog_unload(self):
         self.forum_announcements.cancel()
 
-    @tasks.loop(seconds=60.0)
+    @tasks.loop(seconds=3600.0)
     async def forum_announcements(self):
-        return # rate limit changed so this results in ban
+        # return # rate limit changed so this results in ban
         announce_types = [('forumannounce',partial(scrape_forum)),
                           ('patchnotes',partial(scrape_forum,'https://www.pathofexile.com/forum/view-forum/patch-notes','patch_notes','Forum - Patch Notes')),
                            ('dailydeal',partial(scrape_deals))]
@@ -1019,9 +1018,11 @@ class backgroundTasks(commands.Cog):
                             # raise
             except Exception as e:
                 print('error scraping forums (%s): %r'%(name,e))
-##                raise
+                # raise
                 'just for extra safety because an error here means the loop stops'
                 'this can be caused by things like maintenance'
+            finally:
+                await asyncio.sleep(120)
 
     @forum_announcements.before_loop
     async def before_run(self):
