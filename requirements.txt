@@ -7,7 +7,7 @@ charset-normalizer==2.0.9
 cloudscraper==1.2.71
 dateparser==1.1.0
 discord-py==2.3.2
-idna==3.3
+idna==3.7
 lxml==4.7.1
 multidict==5.2.0
 pyparsing==3.0.6
