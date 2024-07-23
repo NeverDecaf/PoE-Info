@@ -42,7 +42,7 @@ class PoeDB:
         field_names = scrape_poe_wiki.SKILL_GEM_PROPERTY_MAPPING.values()
         levelmax_field_names = scrape_poe_wiki.SKILL_GEM_VARIABLE_FIELDS.values()
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS skill_gems
-                 (thumbnail_url text, {}, {}, PRIMARY KEY (name))'''.format(','.join([name+' text' for name in field_names]),','.join([name+'_max text' for name in levelmax_field_names])))
+                 (thumbnail_url text, skill_id_group text, {}, {}, PRIMARY KEY (name))'''.format(','.join([name+' text' for name in field_names]),','.join([name+'_max text' for name in levelmax_field_names])))
         field_names = scrape_poe_wiki.SKILL_QUALITY_PROPERTY_MAPPING.values()
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS skill_quality
                  ({}, PRIMARY KEY (name,q_type))'''.format(','.join([name+' text' for name in field_names])))
@@ -52,7 +52,7 @@ class PoeDB:
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS event_times
                  (id text primary key, startAt timestamp, endAt timestamp, url text)''')
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS ninja_data
-                 (id integer, name text, icon text, chaosValue real, exaltedValue real, itemClass integer, league text, PRIMARY KEY (id,league))''')
+                 (id integer, name text, icon text, chaosValue real, exaltedValue real, divineValue real, itemClass integer, league text, PRIMARY KEY (id,league))''')
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS ninja_currency_data
                  (id integer, name text, icon text, chaosValue real, league text, PRIMARY KEY (id,league))''')
         # add timestamp triggers to poe.ninja tables
@@ -78,6 +78,10 @@ class PoeDB:
                 pass
         try:
             self.cursor.execute(f'''ALTER TABLE ninja_data ADD COLUMN divineValue real''')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            self.cursor.execute(f'''ALTER TABLE skill_gems ADD COLUMN skill_id_group text''')
         except sqlite3.OperationalError:
             pass
         self.conn.commit()
@@ -119,33 +123,47 @@ class PoeDB:
     # split off into its own function thanks to alt quality.
     def get_skill_data(self,tablename,searchname,league = None,limit = 9, search_by_baseitem = False):
         price_data_to_keep = ['chaosValue','exaltedValue','divineValue']
-        query = f'''SELECT *,
-        q_n.q_stat_text as qual_bonus_normal,
-        q_a.q_stat_text as qual_bonus_anomalous,
-        q_d.q_stat_text as qual_bonus_divergent,
-        q_p.q_stat_text as qual_bonus_phantasmal,
-        {','.join([i+'.'+k+' as '+i+'_'+k for i in ('p_n','p_a','p_d','p_p') for k in price_data_to_keep])}
-        FROM {tablename} 
-        left join skill_quality q_n on REPLACE({tablename}.name,'Vaal ','')=q_n.name AND q_n.q_type=1
-        left join skill_quality q_a on REPLACE({tablename}.name,'Vaal ','')=q_a.name AND q_a.q_type=2
-        left join skill_quality q_d on REPLACE({tablename}.name,'Vaal ','')=q_d.name AND q_d.q_type=3
-        left join skill_quality q_p on REPLACE({tablename}.name,'Vaal ','')=q_p.name AND q_p.q_type=4
-        left join ninja_data p_n on {tablename}.name=p_n.name AND p_n.league=? COLLATE NOCASE
-        left join ninja_data p_a on 'Anomalous ' || {tablename}.name=p_a.name AND p_a.league=? COLLATE NOCASE
-        left join ninja_data p_d on 'Divergent ' || {tablename}.name=p_d.name AND p_d.league=? COLLATE NOCASE
-        left join ninja_data p_p on 'Phantasmal ' || {tablename}.name=p_p.name AND p_p.league=? COLLATE NOCASE
-        WHERE {tablename}.{'baseitem' if search_by_baseitem else 'name'} COLLATE NOCASE LIKE "%"||?||"%" 
-        {'AND drop_enabled' if league not in ('Standard','Hardcore') and tablename=='unique_items' else ''} 
-        GROUP BY {tablename}.name 
-        ORDER BY MAX(p_n.chaosValue) 
-        LIMIT {limit}'''
-        res=self.cursor.execute(query,(league,league,league,league,searchname.lower(),))
+        query = f'''
+            WITH skill_groups AS (
+            SELECT skill_id_group
+            FROM {tablename}
+            WHERE {tablename}.{'baseitem' if search_by_baseitem else 'name'} COLLATE NOCASE LIKE "%"||?||"%"
+            {'AND drop_enabled' if league not in ('Standard','Hardcore') and tablename=='unique_items' else ''}
+            GROUP BY {tablename}.skill_id_group
+            LIMIT {limit}
+        )
+        SELECT *, qual_bonus as qual_bonus_normal,
+        {','.join([i+'.'+k+' as '+i+'_'+k for i in ('p_n',) for k in price_data_to_keep])}
+        FROM {tablename}
+        LEFT JOIN ninja_data p_n ON {tablename}.name = p_n.name AND p_n.league = ? COLLATE NOCASE
+        WHERE {tablename}.skill_id_group IN (SELECT skill_id_group FROM skill_groups)
+        {'AND drop_enabled' if league not in ('Standard','Hardcore') and tablename=='unique_items' else ''}
+        ORDER BY {tablename}.name COLLATE NOCASE LIKE '%' || ? || '%' DESC, {tablename}.skill_id_group == {tablename}.skill_id DESC
+        '''
+        res=self.cursor.execute(query,(searchname.lower(),league,searchname.lower(),))
+        # print(query.replace('?',f"'{league}'"),searchname.lower())
         ret = res.fetchall()
-        if len(ret)>1:
-            for entry in ret:
-                if entry['name'].lower()==searchname.lower():
-                    return [entry]
-        return ret
+        # now you need to group results by skill_id_group to batch trans/vaal gems
+        grouped = self._group_by_row(ret,'skill_id_group')
+        if len(grouped)>1:
+            for group in grouped:
+                for entry in group['list']:
+                    if entry['name'].lower()==searchname.lower():
+                        return [group]
+        return grouped
+        
+    def _group_by_row(self, data, row_name):
+        # data is a list of sqlite Row objects (probably)
+        # will return a list of lists of Row objects, each one is a grouping of results with the same value for row_name
+        # for example, each list is a list of skills with the same skill_id_group root, (vaal cold snap, cold snap, cold snap of power)
+        buckets = {}
+        for p in data:
+            key = p[row_name]
+            if key not in buckets:
+                buckets[key] = {'name':p['name'], 'list':[p]}
+            else:
+                buckets[key]['list'].append(p)
+        return list(buckets.values())
 
     def unique_search_explicit(self,keywords,league,limit = 9):
         query = '''SELECT * FROM unique_items left join ninja_data on unique_items.name=ninja_data.name AND ninja_data.league=? COLLATE NOCASE WHERE unique_items.expl COLLATE NOCASE LIKE "%"||?||"%" COLLATE NOCASE '''

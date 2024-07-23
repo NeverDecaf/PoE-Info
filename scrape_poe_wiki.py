@@ -173,6 +173,7 @@ SKILL_GEM_PROPERTY_MAPPING=dict(
                 'skill.radius_tertiary_description':'radius_3_desc',
                 'skill.html':'html',
                 'skill.stat_text':'stat_text',
+                'skill.skill_id':'skill_id', # used for trans gems matching
                 # skill_levels fields:
                 'skill_levels.attack_speed_multiplier':'attack_speed_multiplier',
                 # skill_quality fields:
@@ -189,7 +190,7 @@ SKILL_QUALITY_PROPERTY_MAPPING={
                 'skill_quality.weight':'q_weight',
         }
 def scrape_skill_gems(limit=100000):
-        query_limit = 500
+        query_limit = min(500,limit)
         rowindex = 0
         last_rowid = -1
         keyed_results = {}
@@ -222,7 +223,7 @@ def scrape_skill_gems(limit=100000):
             time.sleep(3)
         sk_names = list(keyed_results.keys())
         
-        query_limit = 500
+        # query_limit = 500
         batch_size = 10
         rowindex = 0
         # last_rowid = -1
@@ -269,6 +270,8 @@ def scrape_skill_gems(limit=100000):
                         elif thislevel == 1:
                                 #update with all non-null values
                                 keyed_results[res['name']].update({k:v for k,v in res.items() if v})
+                        # trim skill_id to get skill_id_group for grouping trans gems
+                        keyed_results[res['name']]['skill_id_group'] = re.sub(r'Alt[a-zA-Z]$|Plus$|^Vaal', '', res.get('skill_id',''))
                 # rowindex+=query_limit
                 time.sleep(3)
                 # break
@@ -615,14 +618,14 @@ if __name__ == '__main__':
     # print(get_ninja_prices())
     # import datetime
     # print(get_lab_urls(datetime.datetime.utcnow().strftime('%Y-%m-%d')))
-    # print(scrape_skill_gems())
+    print(scrape_skill_gems(10))
     # import pprint
     # with open('skill_gems_test.txt','w') as f:
         # res = scrape_skill_gems()
         # pprint.pprint(res)
         # pprint.pprint(res,f)
     # print(scrape_skill_quality())
-    print(scrape_passive_skills())
+    # print(scrape_passive_skills())
     # print(scrape_unique_items())
     
     # print(remove_wiki_formats(html.unescape('<em class="tc -mod">(278-321)</em>')))

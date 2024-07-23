@@ -574,15 +574,14 @@ class Info(commands.Cog):
         await self._skill_internals(data[0],ctx)
         
     async def _skill_internals(self, data, ctx, interaction=None):
+        # this is for the new format of vaal/trans gems being grouped together.
         'if msg, edit msg instead of sending new one'
         # msg isnt reliable, could be either the initial message or the response depending on context, use edit_msg instead
         view = restrictedView(ctx)
         pages = {}
-        for k,v in QUAL_TO_DB_COL_NAME.items():
-            if data[v]:
-                pages[QUAL_TO_EMOJI[k]] = _create_gem_embed(data,quality = k)
-        if QUAL_TO_EMOJI[Quality.NORMAL] not in pages:
-            pages[QUAL_TO_EMOJI[Quality.NORMAL]] = _create_gem_embed(data)
+        for gem in data['list']:
+            pages[gem['name']] = _create_gem_embed(gem)
+        first = next(iter(pages.keys()))
         for k,v in pages.items():
             button = discord.ui.Button(style=discord.ButtonStyle.primary,label=k)
             view.add_item(button)
@@ -592,16 +591,15 @@ class Info(commands.Cog):
                 btn.disabled=True
                 view.message = await interaction.edit_original_response(content = None, embed = pages[key], view=view)
             button.callback = swap_to
-            if k == QUAL_TO_EMOJI[Quality.NORMAL]:
+            if k == first:
                 button.disabled = True
         if len(pages) == 1:
             view.clear_buttons()
         if interaction:
-            view.message = await interaction.edit_original_response(content=None,embed=pages[QUAL_TO_EMOJI[Quality.NORMAL]], view=view)
+            view.message = await interaction.edit_original_response(content=None,embed=pages[first], view=view)
         else:
-            sent_msg = await bot.send_message(ctx.message.channel, embed=pages[QUAL_TO_EMOJI[Quality.NORMAL]], view=view)
+            sent_msg = await bot.send_message(ctx.message.channel, embed=pages[first], view=view)
             view.message = sent_msg
-
     @commands.command(pass_context=True,aliases=['c'])
     async def currency(self, ctx, *currency_name: str):
         '''<name>
