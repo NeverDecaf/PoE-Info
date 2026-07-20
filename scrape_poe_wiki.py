@@ -122,6 +122,16 @@ def format_affixes(item_list):
         return new_data
 
 # cargo wiki field: local sqlitedb field
+GEM_LEVELS_PROPERTY_MAPPING={
+                #gem_levels fields
+                # 'gem_levels._pageName':'name',
+                # 'gem_levels.level':'gem_level',
+                # 'gem_levels.experience':'gem_xp',
+                'gem_levels.required_dexterity':'dex_requirement',
+                'gem_levels.required_intelligence':'int_requirement',
+                'gem_levels.required_strength':'str_requirement',
+                'gem_levels.required_level':'level_requirement',
+        }
 SKILL_GEM_VARIABLE_FIELDS={
                 # skill_levels fields
 #                'skill_levels.stat_text':'stat_text', # use the one from `skill` as it already has ranges
@@ -129,14 +139,14 @@ SKILL_GEM_VARIABLE_FIELDS={
                 'skill_levels.critical_strike_chance':'crit_chance',
                 'skill_levels.damage_effectiveness':'damage_effectiveness',
                 'skill_levels.damage_multiplier':'damage_multiplier',
-                'skill_levels.dexterity_requirement':'dex_requirement',
+                # 'skill_levels.dexterity_requirement':'dex_requirement',
                 'skill_levels.experience':'xp',
-                'skill_levels.intelligence_requirement':'int_requirement',
-                'skill_levels.level_requirement':'level_requirement',
+                # 'skill_levels.intelligence_requirement':'int_requirement',
+                # 'skill_levels.level_requirement':'level_requirement',
                 # 'skill_levels.mana_cost':'mana_cost',
                 'skill_levels.cost_multiplier':'mana_multiplier',
                 'skill_levels.stored_uses':'stored_uses',
-                'skill_levels.strength_requirement':'str_requirement',
+                # 'skill_levels.strength_requirement':'str_requirement',
                 'skill_levels.vaal_souls_requirement':'vaal_souls_requirement',
                 'skill_levels.vaal_stored_uses':'vaal_stored_uses',
                 
@@ -236,8 +246,9 @@ def scrape_skill_gems(limit=100000):
         for start_index in range(0,len(sk_names),batch_size):
         # while rowindex<limit:
                 # if the results of this query exceeds query_limit you are just screwed, so keep batch_size low.
-                query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_gems,skill,skill_levels,skill_quality&join_on=skill_gems.skill_id=skill.skill_id,skill._pageName=skill_levels._pageName,skill._pageName=skill_quality._pageName&fields='+\
-                ','.join(['='.join((k,v)) for k,v in SKILL_GEM_PROPERTY_MAPPING.items()])+f''',skill_levels.level=level&where=(skill_levels.level=skill.max_level OR skill_levels.level<2) AND skill_gems._pageName IN ({",".join([f'"{a}"' for a in sk_names[start_index:start_index+batch_size]])})&limit={query_limit}'''
+                query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_gems,skill,skill_levels,skill_quality,gem_levels&join_on=skill._pageName=skill_levels._pageName,skill._pageName=skill_quality._pageName,skill.skill_id=skill_gems.skill_id,skill_gems._pageName=gem_levels._pageName,skill_levels.level=gem_levels.level&fields='+\
+                f'''{','.join(['='.join((k,v)) for k,v in SKILL_GEM_PROPERTY_MAPPING.items()])},{','.join(['='.join((k,v)) for k,v in GEM_LEVELS_PROPERTY_MAPPING.items()])}'''+\
+                f''',skill_levels.level=level&where=(skill_levels.level=skill.max_level OR skill_levels.level<2) AND skill_gems._pageName IN ({",".join([f'"{a}"' for a in sk_names[start_index:start_index+batch_size]])})&limit={query_limit}'''
                 api_results = []
                 for i in range(3):
                         rj=None

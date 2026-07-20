@@ -29,7 +29,7 @@ class PoeDB:
             self.conn=sqlite3.connect(self.db, detect_types=sqlite3.PARSE_DECLTYPES)
         self.conn.row_factory = sqlite3.Row
         def _trim_variant(itemname):
-            return re.sub(' ?\([^)]*\)','',itemname)
+            return re.sub(r' ?\([^)]*\)','',itemname)
         self.conn.create_function('trim_variant',1,_trim_variant)
         self.cursor=self.conn.cursor()
         # self.cursor.execute('pragma short_column_names=OFF;')
