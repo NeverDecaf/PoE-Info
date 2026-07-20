@@ -639,7 +639,7 @@ def get_ninja_rates(league='tmpStandard'):
             for x in rj['items']:
                     data.append({'name': x['name'],
                                  'id': x['id'],
-                                 'icon': f"https://web.poecdn.com/{x['image'] if 'image' in x else generic_images.get(itemtype,None)}",
+                                 'icon': f"https://web.poecdn.com{x['image'] if 'image' in x else generic_images.get(itemtype,None)}",
                                  'chaosValue': id_map[x['id']],
                                  # 'itemClass': x['category'], not in currency table
                                  'league': league,
