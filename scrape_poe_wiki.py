@@ -122,7 +122,7 @@ def format_affixes(item_list):
         return new_data
 
 # cargo wiki field: local sqlitedb field
-GEM_LEVELS_PROPERTY_MAPPING={
+GEM_LEVELS_VARIABLE_FIELDS={
                 #gem_levels fields
                 # 'gem_levels._pageName':'name',
                 # 'gem_levels.level':'gem_level',
@@ -189,7 +189,8 @@ SKILL_GEM_PROPERTY_MAPPING=dict(
                 # skill_quality fields:
                 'skill_quality.stat_text':'qual_bonus',
         },
-        **SKILL_GEM_VARIABLE_FIELDS)
+        **SKILL_GEM_VARIABLE_FIELDS,
+        **GEM_LEVELS_VARIABLE_FIELDS)
 
 # cargo wiki field: local sqlitedb field
 SKILL_QUALITY_PROPERTY_MAPPING={
@@ -247,7 +248,7 @@ def scrape_skill_gems(limit=100000):
         # while rowindex<limit:
                 # if the results of this query exceeds query_limit you are just screwed, so keep batch_size low.
                 query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_gems,skill,skill_levels,skill_quality,gem_levels&join_on=skill._pageName=skill_levels._pageName,skill._pageName=skill_quality._pageName,skill.skill_id=skill_gems.skill_id,skill_gems._pageName=gem_levels._pageName,skill_levels.level=gem_levels.level&fields='+\
-                f'''{','.join(['='.join((k,v)) for k,v in SKILL_GEM_PROPERTY_MAPPING.items()])},{','.join(['='.join((k,v)) for k,v in GEM_LEVELS_PROPERTY_MAPPING.items()])}'''+\
+                f'''{','.join(['='.join((k,v)) for k,v in SKILL_GEM_PROPERTY_MAPPING.items()])}'''+\
                 f''',skill_levels.level=level&where=(skill_levels.level=skill.max_level OR skill_levels.level<2) AND skill_gems._pageName IN ({",".join([f'"{a}"' for a in sk_names[start_index:start_index+batch_size]])})&limit={query_limit}'''
                 api_results = []
                 for i in range(3):
@@ -272,8 +273,9 @@ def scrape_skill_gems(limit=100000):
                         if res['name'] not in keyed_results:
                                 keyed_results[res['name']] = res
                         if thislevel == int(res['max_level']):
-                                # add _max version of all SKILL_GEM_VARIABLE_FIELDS
+                                # add _max version of all _VARIABLE_FIELDS
                                 keyed_results[res['name']].update({'{}_max'.format(k):v for k,v in res.items() if k in SKILL_GEM_VARIABLE_FIELDS.values()})
+                                keyed_results[res['name']].update({'{}_max'.format(k):v for k,v in res.items() if k in GEM_LEVELS_VARIABLE_FIELDS.values()})
                         elif thislevel == 0:
                                 #updates dict, replacing only the empty values with new ones
                                 keyed_results[res['name']].update(
@@ -501,30 +503,32 @@ def scrape_passive_skills(limit=50000):
         
 #only the fields we care about.
 #itemclass 4 is gems. probably the only one we need
-POE_NINJA_FIELDS = ['id',
-                    'name',
-                    'icon',
-                    'itemClass',
-                    'chaosValue',
-                    'exaltedValue',
-                    'divineValue'
-                    ]
+# POE_NINJA_FIELDS = ['id',
+                    # 'name',
+                    # 'icon',
+                    # 'itemClass',
+                    # 'chaosValue',
+                    # 'exaltedValue',
+                    # 'divineValue'
+                    # ]
                     
 def get_ninja_prices(league='tmpStandard'):
         '''use poe.ninja api to get item prices'''
-        endpoints = [('item','UniqueMap'),
-                     ('item','UniqueJewel'),
-                     ('item','UniqueFlask'),
-                     ('item','UniqueWeapon'),
-                     ('item','UniqueArmour'),
-                     ('item','UniqueAccessory'),
-                     ('item','SkillGem'),
-                     ]
-        # endpoints = [('item','SkillGem'),]
+        itemtypes = [
+             # 'SkillGem',
+             # 'UniqueJewel',
+             # 'UniqueFlask',
+             # 'UniqueWeapon',
+             # 'UniqueArmour',
+             # 'UniqueAccessory',
+             'UniqueTincture',
+             # 'UniqueRelic',
+             # 'UniqueMap',
+             ]
         data=[]
-        api = 'https://poe.ninja/api/data/{}overview?league={}&type={}'
-        for itemtype in endpoints:
-            r = requests.get(api.format(itemtype[0],league,itemtype[1]))
+        api = 'https://poe.ninja/poe1/api/economy/stash/current/item/overview?league={}&type={}'
+        for itemtype in itemtypes:
+            r = requests.get(api.format(league,itemtype))
             r.encoding = 'utf-8'
             try:
                 rj = r.json()
@@ -534,30 +538,63 @@ def get_ninja_prices(league='tmpStandard'):
                 print('failed to fetch poe.ninja data for league:',league,'(normal for event leagues)')
                 return
             for x in rj['lines']:
-                if int(x['itemClass'])==4:
-                    if re.search('(?: |^)Vaal ',x['name']) and int(x['gemLevel'])==20 and int(x.get('gemQuality',0))==20:
-                        # use 20/20 for vaal gems
-                        data.append({key:x[key] for key in POE_NINJA_FIELDS})
-                    elif int(x['gemLevel'])==1 and int(x.get('gemQuality',0))==20:
-                        # use 1/20 for normal gems
-                        data.append({key:x[key] for key in POE_NINJA_FIELDS})
-                elif x['name'].strip() in ['Tabula Rasa','Skin of the Lords','Skin of the Loyal','The Goddess Unleashed','Oni-Goroshi','Shadowstitch']:
-                    if int(x['links'])==6:
-                        data.append({key:x[key] for key in POE_NINJA_FIELDS})
-                elif 'links' not in x or int(x['links'])==0:
-                    data.append({key:x[key] for key in POE_NINJA_FIELDS})
+                if 'links' in x:
+                    if x['name'].strip().strip('Foulborn ') not in ['Tabula Rasa','Skin of the Lords','Skin of the Loyal','The Goddess Unleashed','Oni-Goroshi','Shadowstitch']:
+                        continue
+                if itemtype == 'SkillGem':
+                    # use 20/20 for vaal gems
+                    # use 1/20 for normal gems
+                    if x['gemLevel']!=1:
+                        if re.search('(?: |^)Vaal ',x['name']) and int(x['gemLevel'])==20 and int(x.get('gemQuality',0))==20:
+                            pass
+                        else:
+                            continue
+                    elif int(x.get('gemQuality',0))!=20:
+                        continue
+                data.append({'name': x['name'],
+                             'id': x['id'],
+                             'icon': x['icon'],
+                             'chaosValue': x['chaosValue'],
+                             'itemClass': x.get('itemType',itemtype),
+                             'league': league,
+                             'divineValue': x.get('divineValue',None), # legacy items may not have divineValue (exalted era)
+                            })
             time.sleep(3)
         for d in data:
             d.update({'league':league})
         return data
 def get_ninja_rates(league='tmpStandard'):
         '''use poe.ninja api to get currency prices'''
-        itemtypes = ['DivinationCard','Oil','Scarab','Fossil','Resonator','Essence'] 
+        ''' this ONLY uses the in game exchange rates now '''
+        # itemtypes = [('item','DivinationCard'),
+                     # ('item','Oil'),
+                     # ('item','Scarab'),
+                     # ('item','Fossil'),
+                     # ('item','Resonator'),
+                     # ('item','Essence'),
+                     # ('item','Resonator'),
+                     # ]
         ''' 
         omitted:
         Prophecy
         '''
-        currencytypes = ['Currency','Fragment']
+        currencytypes = ['Currency',
+                         'Fragment',
+                         'Runegraft',
+                         'AllflameEmber',
+                         'Tattoo',
+                         'Omen',
+                         'DjinnCoin',
+                         'DivinationCard',
+                         'Artifact',
+                         'Oil',
+                         'DeliriumOrb',
+                         'Scarab',
+                         'Astrolabe',
+                         'Fossil',
+                         'Resonator',
+                         'Essence']
+
         '''
         omitted categories:
         Watchstones
@@ -569,40 +606,45 @@ def get_ninja_rates(league='tmpStandard'):
         Vials
         '''
         data=[]
-        api = 'https://poe.ninja/api/data/{}overview?league={}&type={}'
-        for type in currencytypes:
-            r = requests.get(api.format('currency',league,type))
+        api = 'https://poe.ninja/poe1/api/economy/exchange/current/overview?league={}&type={}'
+        for itemtype in currencytypes:
+            r = requests.get(api.format(league,itemtype))
             r.encoding = 'utf-8'
             try:
                     rj = r.json()
             except JSONDecodeError:
-                    print("Error fetching currency data for:",type,'in',league,'(normal for event leagues)')
+                    print("Error fetching currency data for:",itemtype[1],'in',league,'(normal for event leagues)')
                     continue
             if 'lines' not in rj: #rj['status'] != 200:
                 print('failed to fetch poe.ninja currency data for league:',league,'(normal for event leagues)')
                 continue
             id_map = {}
-            for x in rj['currencyDetails']:
-                    id_map[x['name']] = (x['id'],x.get('icon',None))
+            generic_images = {'DivinationCard': '/gen/image/WzI1LDE0LHsiZiI6IjJESXRlbXMvRGl2aW5hdGlvbi9JbnZlbnRvcnlJY29uIiwidyI6MSwiaCI6MSwic2NhbGUiOjF9XQ/f34bf8cbb5/InventoryIcon.png',
+                            }
+            '''
+            stats:
+            id
+            name
+            icon
+            chaosValue
+            exaltedValue (not used? but can be)
+            itemClass (only used for gems)
+            league
+            timestamp
+            divineValue
+            '''
+            conversion = rj['core']['rates']['divine']
             for x in rj['lines']:
-                    data.append({'name':x['currencyTypeName'], 'chaosValue':x['chaosEquivalent']})
-                    data[-1]['id'],data[-1]['icon'] = id_map[x['currencyTypeName']]
-                    data[-1]['league'] = league
-        for type in itemtypes:
-            r = requests.get(api.format('item',league,type))
-            r.encoding = 'utf-8'
-            try:
-                    rj = r.json()
-            except JSONDecodeError:
-                    print("Error fetching currency data for:",type,'in',league,'(normal for event leagues)')
-                    continue
-            if 'lines' not in rj: #rj['status'] != 200:
-                print('failed to fetch poe.ninja currency data for league:',league,'(normal for event leagues)')
-                continue
-            for x in rj['lines']:
-                    data.append({'name':x['name'], 'chaosValue':x['chaosValue']})
-                    data[-1]['id'],data[-1]['icon'] = -x['id'],x['icon']
-                    data[-1]['league'] = league
+                    id_map[x['id']] = x['primaryValue']
+            for x in rj['items']:
+                    data.append({'name': x['name'],
+                                 'id': x['id'],
+                                 'icon': f"https://web.poecdn.com/{x['image'] if 'image' in x else generic_images.get(itemtype,None)}",
+                                 'chaosValue': id_map[x['id']],
+                                 'itemClass': x['category'],
+                                 'league': league,
+                                 'divineValue': id_map[x['id']] * conversion
+                                })
         return data
 def get_lab_urls(date):
     ''' returns all 4 lab urls from poelab.com 
@@ -627,10 +669,10 @@ def get_lab_urls(date):
     return ret
 if __name__ == '__main__':
     # print(get_ninja_rates())
-    # print(get_ninja_prices())
+    print(get_ninja_prices())
     # import datetime
     # print(get_lab_urls(datetime.datetime.utcnow().strftime('%Y-%m-%d')))
-    print(scrape_skill_gems(2))
+    # print(scrape_skill_gems(2))
     # import pprint
     # with open('skill_gems_test.txt','w') as f:
         # res = scrape_skill_gems()
