@@ -697,8 +697,8 @@ def _create_unique_embed(data):
         if val and val!='1':
             return stat+' '+val
         return ''
-    bold_nums = re.compile('(\(?-?(?:\d+(?:-|(?: to )))?\d*\.?\d+\)?%?)')
-    bold_nums = re.compile('(\(?-?(?:\d*\.?\d+(?:-|(?: to )))?\d*\.?\d+\)?%?)')
+    bold_nums = re.compile(r'(\(?-?(?:\d+(?:-|(?: to )))?\d*\.?\d+\)?%?)')
+    bold_nums = re.compile(r'(\(?-?(?:\d*\.?\d+(?:-|(?: to )))?\d*\.?\d+\)?%?)')
     if SMALL_CURRENCY in data.keys() and LARGE_CURRENCY in data.keys() and data[SMALL_CURRENCY] is not None and data[LARGE_CURRENCY] is not None:
         if data[LARGE_CURRENCY] > 1:
             stats_string = f'Est. Price: {data[LARGE_CURRENCY]:.1f}{LARGE_CURRENCY_LABEL}\n'
@@ -737,7 +737,7 @@ def _create_unique_embed(data):
     elif 'image_url' in data.keys() and data['image_url']:
         e.set_thumbnail(url=f"{WIKI_BASE}Special:Redirect/file/{urlquote(data['image_url'])}")
     if data['impl'] or data['expl']: #this is only for tabula
-        header = re.compile('<th[^>]*>(.*?)<\/th>',re.DOTALL)
+        header = re.compile(r'<th[^>]*>(.*?)<\/th>',re.DOTALL)
         expl_mods = str(data['expl'])
         table_header = header.search(expl_mods)
         if table_header:
@@ -763,7 +763,7 @@ def _create_gem_embed(data, quality=Quality.NORMAL):
         if val:
             return ', '+val+' '+stat
         return ''
-    bold_nums = re.compile('(\(?-?(?:\d*\.?\d+(?:-|(?: to )))?\d*\.?\d+\)?%?)')
+    bold_nums = re.compile(r'(\(?-?(?:\d*\.?\d+(?:-|(?: to )))?\d*\.?\d+\)?%?)')
     SMALL_CURRENCY_KEY = f'{QUAL_TO_DB_COL_PREFIX[quality]}_{SMALL_CURRENCY}'
     LARGE_CURRENCY_KEY = f'{QUAL_TO_DB_COL_PREFIX[quality]}_{LARGE_CURRENCY}'
     if SMALL_CURRENCY_KEY in data.keys() and LARGE_CURRENCY_KEY in data.keys() and data[SMALL_CURRENCY] is not None and data[LARGE_CURRENCY_KEY] is not None:
@@ -781,8 +781,8 @@ def _create_gem_embed(data, quality=Quality.NORMAL):
         stats_string = ''
     if data['mana_multiplier']:
         stats_string+='Mana Multiplier: {}%\n'.format(data['mana_multiplier'])
-    if data['radius']:
-        stats_string+='Radius: {}\n'.format(data['radius'])
+    # if data['radius']:
+        # stats_string+='Radius: {}\n'.format(data['radius'])
 
     def rangeify(key):
         if data[f'{key}_max']:
@@ -818,8 +818,8 @@ def _create_gem_embed(data, quality=Quality.NORMAL):
         stats_string+='Cast Time: {}s\n'.format(data['cast_time'])
     if data['crit_chance']:
         stats_string+='Critical Strike Chance: {}%\n'.format(data['crit_chance'])
-    if data['proj_speed']:
-        stats_string+='Projectile Speed: {}\n'.format(data['proj_speed'])
+    # if data['proj_speed']:
+        # stats_string+='Projectile Speed: {}\n'.format(data['proj_speed'])
     if data['attack_speed_multiplier'] and int(data['attack_speed_multiplier'])!=100:
         stats_string+='Attack Speed: {}% of base\n'.format(data['attack_speed_multiplier'])
     if data['damage_effectiveness']:

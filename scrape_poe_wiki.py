@@ -84,9 +84,9 @@ def format_affixes(item_list):
                                         for i in range(len(expl_mods)):
                                                 expl_mods[i] = re.sub('^@.*','',expl_mods[i]) # remove implicits
                                                 expl_mods[i] = re.sub('^:','',expl_mods[i])
-                                                expl_mods[i] = re.sub('(^\d+-\d+)(:)','(\\1) ',expl_mods[i])
-                                                expl_mods[i] = re.sub('(^\d+-\d+),(\d+-\d+)(:)','(\\1)-(\\2) ',expl_mods[i])
-                                        item['expl'] = '<br>'.join([mod for mod in expl_mods if not re.match('^\s*$',mod)])
+                                                expl_mods[i] = re.sub(r'(^\d+-\d+)(:)','(\\1) ',expl_mods[i])
+                                                expl_mods[i] = re.sub(r'(^\d+-\d+),(\d+-\d+)(:)','(\\1)-(\\2) ',expl_mods[i])
+                                        item['expl'] = '<br>'.join([mod for mod in expl_mods if not re.match(r'^\s*$',mod)])
                                         style_variant_included.append(item_name)
 ##                                        break           # skip the rest of the loop because mod line was added properly
                                 else:
@@ -99,7 +99,7 @@ def format_affixes(item_list):
                 mod_line = item['name']
 
                 if item['impl']:
-                        impl_mod_list = re.split('<br\s*/?\s*>',item['impl'])
+                        impl_mod_list = re.split(r'<br\s*/?\s*>',item['impl'])
                         impl_mod_list = remove_hidden_mods(impl_mod_list)
                         
                         if impl_mod_list:               # mod list is not empty
@@ -108,7 +108,7 @@ def format_affixes(item_list):
                                 item['impl'] = None
                 
                 if item['expl']:
-                        expl_mod_list = re.split('<br\s*/?\s*>',item['expl'])
+                        expl_mod_list = re.split(r'<br\s*/?\s*>',item['expl'])
                         expl_mod_list = remove_hidden_mods(expl_mod_list)
                         
                         if expl_mod_list:               # mod list is not empty
@@ -151,27 +151,27 @@ SKILL_GEM_PROPERTY_MAPPING=dict(
         {
                 # skill_gems fields:
                 'skill_gems._pageName':'name',
-                'skill_gems.gem_description':'gem_desc',
+                'skill.description':'gem_desc',
                 'skill_gems.support_gem_letter':'support_letter',
                 'skill_gems.gem_tags':'tags',
                 'skill_gems.primary_attribute':'primary_att',
-                'skill_gems.dexterity_percent':'dex_percent',
-                'skill_gems.intelligence_percent':'int_percent',
-                'skill_gems.strength_percent':'str_percent',
+                # 'skill_gems.dexterity_percent':'dex_percent',
+                # 'skill_gems.intelligence_percent':'int_percent',
+                # 'skill_gems.strength_percent':'str_percent',
                 # skill fields:
                 'skill.skill_icon':'image_url',
                 # 'skill.has_reservation_mana_cost':'is_res',
                 'skill.item_class_restriction':'item_restriction',
                 'skill.max_level':'max_level',
-                'skill.projectile_speed':'proj_speed',
+                # 'skill.projectile_speed':'proj_speed',
                 'skill.cast_time':'cast_time',
-                'skill.radius':'radius',
-                'skill.radius_secondary':'radius_2',
-                'skill.radius_tertiary':'radius_3',
-                'skill.radius_description':'radius_desc',
-                'skill.radius_secondary_description':'radius_2_desc',
-                'skill.radius_tertiary_description':'radius_3_desc',
-                'skill.html':'html',
+                # 'skill.radius':'radius',
+                # 'skill.radius_secondary':'radius_2',
+                # 'skill.radius_tertiary':'radius_3',
+                # 'skill.radius_description':'radius_desc',
+                # 'skill.radius_secondary_description':'radius_2_desc',
+                # 'skill.radius_tertiary_description':'radius_3_desc',
+                # 'skill.html':'html',
                 'skill.stat_text':'stat_text',
                 'skill.skill_id':'skill_id', # used for trans gems matching
                 # skill_levels fields:
@@ -196,8 +196,9 @@ def scrape_skill_gems(limit=100000):
         keyed_results = {}
         
         # query each skill separately to prevent results that are too long for mediawiki
+        # _pageNamespace == 0 filters out Template: pages
         while rowindex<limit:
-            query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_gems&fields=skill_gems._pageName=name,skill_gems._rowID=rowid&where=skill_gems._rowID>{last_rowid+1}&order_by=skill_gems._rowID&limit={query_limit}'
+            query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_gems&fields=skill_gems._pageName=name,skill_gems._rowID=rowid&where=skill_gems._rowID>{last_rowid+1} AND skill_gems._pageNamespace=0&order_by=skill_gems._rowID&limit={query_limit}'
             api_results = []
             for i in range(3):
                 rj=None
@@ -235,7 +236,7 @@ def scrape_skill_gems(limit=100000):
         for start_index in range(0,len(sk_names),batch_size):
         # while rowindex<limit:
                 # if the results of this query exceeds query_limit you are just screwed, so keep batch_size low.
-                query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_gems,skill,skill_levels,skill_quality&join_on=skill_gems._pageName=skill._pageName,skill_gems._pageName=skill_levels._pageName,skill_gems._pageName=skill_quality._pageName&fields='+\
+                query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_gems,skill,skill_levels,skill_quality&join_on=skill_gems.skill_id=skill.skill_id,skill._pageName=skill_levels._pageName,skill._pageName=skill_quality._pageName&fields='+\
                 ','.join(['='.join((k,v)) for k,v in SKILL_GEM_PROPERTY_MAPPING.items()])+f''',skill_levels.level=level&where=(skill_levels.level=skill.max_level OR skill_levels.level<2) AND skill_gems._pageName IN ({",".join([f'"{a}"' for a in sk_names[start_index:start_index+batch_size]])})&limit={query_limit}'''
                 api_results = []
                 for i in range(3):
@@ -618,7 +619,7 @@ if __name__ == '__main__':
     # print(get_ninja_prices())
     # import datetime
     # print(get_lab_urls(datetime.datetime.utcnow().strftime('%Y-%m-%d')))
-    print(scrape_skill_gems(10))
+    print(scrape_skill_gems(2))
     # import pprint
     # with open('skill_gems_test.txt','w') as f:
         # res = scrape_skill_gems()
