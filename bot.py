@@ -446,6 +446,10 @@ async def multiple_choice_view(ctx, data, func, edit_func=None):
         <edit_func>
         if defined, will call this instead to edit the existing message entirely.
     '''
+    # this ensures that exact matches will appear in the 9 results
+    data.sort(
+        key=lambda item: item['name'].lower() != ' '.join(ctx.args[2:]).lower()
+    )
     view = restrictedView(ctx)
     for i in range(min(SEARCH_REACTION_LIMIT,len(data))):
         button = discord.ui.Button(label=data[i]['name'])

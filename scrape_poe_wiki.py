@@ -515,15 +515,15 @@ def scrape_passive_skills(limit=50000):
 def get_ninja_prices(league='tmpStandard'):
         '''use poe.ninja api to get item prices'''
         itemtypes = [
-             # 'SkillGem',
-             # 'UniqueJewel',
-             # 'UniqueFlask',
-             # 'UniqueWeapon',
-             # 'UniqueArmour',
-             # 'UniqueAccessory',
+             'SkillGem',
+             'UniqueJewel',
+             'UniqueFlask',
+             'UniqueWeapon',
+             'UniqueArmour',
+             'UniqueAccessory',
              'UniqueTincture',
-             # 'UniqueRelic',
-             # 'UniqueMap',
+             'UniqueRelic',
+             'UniqueMap',
              ]
         data=[]
         api = 'https://poe.ninja/poe1/api/economy/stash/current/item/overview?league={}&type={}'
@@ -633,7 +633,7 @@ def get_ninja_rates(league='tmpStandard'):
             timestamp
             divineValue
             '''
-            conversion = rj['core']['rates']['divine']
+            # conversion = rj['core']['rates']['divine']
             for x in rj['lines']:
                     id_map[x['id']] = x['primaryValue']
             for x in rj['items']:
@@ -641,9 +641,9 @@ def get_ninja_rates(league='tmpStandard'):
                                  'id': x['id'],
                                  'icon': f"https://web.poecdn.com/{x['image'] if 'image' in x else generic_images.get(itemtype,None)}",
                                  'chaosValue': id_map[x['id']],
-                                 'itemClass': x['category'],
+                                 # 'itemClass': x['category'], not in currency table
                                  'league': league,
-                                 'divineValue': id_map[x['id']] * conversion
+                                 # 'divineValue': id_map[x['id']] * conversion
                                 })
         return data
 def get_lab_urls(date):
