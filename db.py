@@ -40,7 +40,7 @@ class PoeDB:
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS unique_items
                  (thumbnail_url text, {}, PRIMARY KEY (name))'''.format(','.join([name+' text' for name in field_names])))
         field_names = scrape_poe_wiki.SKILL_GEM_PROPERTY_MAPPING.values()
-        levelmax_field_names = scrape_poe_wiki.SKILL_GEM_VARIABLE_FIELDS.values()
+        levelmax_field_names = list(scrape_poe_wiki.SKILL_GEM_VARIABLE_FIELDS.values()) + list(scrape_poe_wiki.GEM_LEVELS_VARIABLE_FIELDS.values())
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS skill_gems
                  (thumbnail_url text, skill_id_group text, {}, {}, PRIMARY KEY (name))'''.format(','.join([name+' text' for name in field_names]),','.join([name+'_max text' for name in levelmax_field_names])))
         field_names = scrape_poe_wiki.SKILL_QUALITY_PROPERTY_MAPPING.values()
