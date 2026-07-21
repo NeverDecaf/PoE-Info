@@ -186,7 +186,7 @@ SKILL_GEM_PROPERTY_MAPPING=dict(
                 'skill.skill_id':'skill_id', # used for trans gems matching
                 # skill_levels fields:
                 'skill_levels.attack_speed_multiplier':'attack_speed_multiplier',
-                'skill_levels.level':'level',
+                'skill_levels.level':'level', # 'level' is added to the schema by this but never used, however this is easier to maintain.
                 # skill_quality fields:
                 'skill_quality.stat_text':'qual_bonus',
         },
@@ -210,10 +210,12 @@ def scrape_skill_gems():
         while last_batch_size == query_limit:
             # table joins
             # requested fields
-            # sort and filter (_pageNamespace == 0 filters out Template: pages)
+            # sort and filter (_pageNamespace == 0 filters out Template: pages) (order by skill level so lv20 stats overwrite)
             query = f'''{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_gems,skill,skill_levels,skill_quality,gem_levels&join_on=skill._pageName=skill_levels._pageName,skill._pageName=skill_quality._pageName,skill.skill_id=skill_gems.skill_id,skill_gems._pageName=gem_levels._pageName,skill_levels.level=gem_levels.level&fields='''+\
                 f'''{','.join(['='.join((k,v)) for k,v in SKILL_GEM_PROPERTY_MAPPING.items()])},skill_gems._rowID=rowid'''+\
-                f'''&where=(skill_levels.level=skill.max_level OR skill_levels.level<2) AND skill_gems._rowID >= {last_rowid - 1} AND skill_gems._pageNamespace=0&order_by=skill_gems._rowID&limit={query_limit}'''
+                f'''&where=(skill_levels.level=skill.max_level OR skill_levels.level<2) AND skill_gems._rowID >= {last_rowid - 1} '''+\
+                f'''AND skill_gems._pageNamespace=0&order_by=skill_gems._rowID,skill_levels.level&limit={query_limit}'''
+                # f'''AND skill_gems._pageNamespace=0 AND skill.skill_id="SupportArrogance"&order_by=skill_gems._rowID,skill_levels.level&limit={query_limit}''' # replaces line above for debug
             api_results = []
             for i in range(3):
                 try:
@@ -233,19 +235,16 @@ def scrape_skill_gems():
             for res in api_results:
                 thislevel = int(res.pop('level',None))
                 last_rowid = int(res.pop('rowid'))
-                keyed_results[res['name']] = res
+                if res['name'] not in keyed_results:
+                    # level 0
+                    keyed_results[res['name']] = res
+                elif thislevel == 1:
+                    # update with all non-null values
+                    keyed_results[res['name']].update({k:v for k,v in res.items() if v})
                 if thislevel == int(res['max_level']):
                     # add _max version of all _VARIABLE_FIELDS
                     keyed_results[res['name']].update({'{}_max'.format(k):v for k,v in res.items() if k in SKILL_GEM_VARIABLE_FIELDS.values()})
                     keyed_results[res['name']].update({'{}_max'.format(k):v for k,v in res.items() if k in GEM_LEVELS_VARIABLE_FIELDS.values()})
-                elif thislevel == 0:
-                    #updates dict, replacing only the empty values with new ones
-                    keyed_results[res['name']].update(
-                        {k:v for k,v in res.items() if k not in [k for k,v in keyed_results[res['name']].items() if v]}
-                        )
-                elif thislevel == 1:
-                    #update with all non-null values
-                    keyed_results[res['name']].update({k:v for k,v in res.items() if v})
                 # trim skill_id to get skill_id_group for grouping trans gems
                 keyed_results[res['name']]['skill_id_group'] = re.sub(r'Alt[a-zA-Z]$|Plus$|^Vaal', '', res.get('skill_id',''))
             time.sleep(3)
@@ -379,6 +378,7 @@ def scrape_unique_items():
             '''items._pageName=shields._pageName,items._pageName=armours._pageName,items._pageName=jewels._pageName,items._pageName=flasks._pageName'''+\
             f'''&fields={','.join(['='.join((k,v)) for k,v in UNIQUE_ITEM_PROPERTY_MAPPING.items()])},'''+\
             f'''items._rowID=rowid&where=rarity=\'Unique\' AND items._rowID>={last_rowid - 1}&group_by=items._pageName&order_by=items._rowID&limit={query_limit}'''
+            # f'''items._rowID=rowid&where=rarity=\'Unique\' AND items._pageName = "The Dark Monarch"&group_by=items._pageName&order_by=items._rowID&limit={query_limit}'''
         api_results = []
         for i in range(3):
             try:
@@ -624,7 +624,7 @@ if __name__ == '__main__':
     # print(scrape_skill_gems())
     # print(scrape_skill_quality())
     # print(scrape_passive_skills())
-    # print(scrape_unique_items())
+    print(scrape_unique_items())
     
     # import datetime
     # print(get_lab_urls(datetime.datetime.utcnow().strftime('%Y-%m-%d')))

@@ -785,15 +785,18 @@ def _create_gem_embed(data, quality=Quality.NORMAL):
                 stats_string = f'20q Price: {data[SMALL_CURRENCY_KEY]:.0f}{SMALL_CURRENCY_LABEL}\n'
     else:
         stats_string = ''
-    if data['mana_multiplier']:
-        stats_string+='Mana Multiplier: {}%\n'.format(data['mana_multiplier'])
-    # if data['radius']:
-        # stats_string+='Radius: {}\n'.format(data['radius'])
 
     def rangeify(key):
         if data[f'{key}_max']:
             return f"({data[key]}-{data[f'{key}_max']})"
         return data[key]
+    if data['mana_multiplier']:
+        coststr = rangeify('mana_multiplier')
+        if coststr != "100":
+            stats_string+=f"Mana Multiplier: {coststr}%\n"
+    # if data['radius']:
+        # stats_string+='Radius: {}\n'.format(data['radius'])
+
     if data['cost_amounts']:
         stats_string+=f"{data['cost_types']} Cost: {rangeify('cost_amounts')}\n"
     if data['mana_res_flat']:
