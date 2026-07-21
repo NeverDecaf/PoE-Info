@@ -33,8 +33,7 @@ this format is used in the wiki to distinguish style variants of items, giving e
 since the style variants ingame all have the same name, we want to filter these out and
 put in a manually prepared version that covers all styles in one overview. 
 """
-
-regex_wiki_table = re.compile(r'<table[^>]*><tr[^>]*>([^<]*).*</table[^>]*>',re.DOTALL|re.I)
+regex_wiki_table = re.compile(r'<table[^>]*>.*?<th[^>]*>([^<]*).*?</table[^>]*>',re.DOTALL|re.I)
 """
 matches table element used sometimes in expl and impl
 capture group 1 is the first row in the table, usually a descriptive name.
@@ -378,7 +377,8 @@ def scrape_unique_items():
             '''items._pageName=shields._pageName,items._pageName=armours._pageName,items._pageName=jewels._pageName,items._pageName=flasks._pageName'''+\
             f'''&fields={','.join(['='.join((k,v)) for k,v in UNIQUE_ITEM_PROPERTY_MAPPING.items()])},'''+\
             f'''items._rowID=rowid&where=rarity=\'Unique\' AND items._rowID>={last_rowid - 1}&group_by=items._pageName&order_by=items._rowID&limit={query_limit}'''
-            # f'''items._rowID=rowid&where=rarity=\'Unique\' AND items._pageName = "The Dark Monarch"&group_by=items._pageName&order_by=items._rowID&limit={query_limit}'''
+            # f'''items._rowID=rowid&where=rarity=\'Unique\' AND items._pageName = "Doryani's Delusion (Evasion)"&group_by=items._pageName&order_by=items._rowID&limit={query_limit}'''
+            # Doryani's Delusion (Evasion), Watcher's Eye, swap above row in to debug.
         api_results = []
         for i in range(3):
             try:

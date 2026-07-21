@@ -667,8 +667,8 @@ def _cache_labs():
     bot.conn.commit()
 
 def _strip_html_tags(text):
-    return re.sub(r'<(?!One to)[^>]+>','',re.sub(r'<(br|tr|hr)[^>]+>','\n',re.sub(r' \| ','\n',text)),flags=re.I)
-    
+    return re.sub(r'<(br|tr|hr)[^>]+>','\n',re.sub(r' \| ','\n',text)).replace('&lt;','<').replace('&gt;','>')
+
 def _create_currency_embed(data):
     price = data[SMALL_CURRENCY]
     exaltValue = bot.db.get_currency(LARGE_CURRENCY_NAME,data['league'], exact=True,limit=SEARCH_LIMIT)[0][SMALL_CURRENCY]
