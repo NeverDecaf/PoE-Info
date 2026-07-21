@@ -9,7 +9,7 @@ from functools import wraps,partial
 import sqlite3
 import time
 from collections import OrderedDict
-import requests, io, urllib.request
+import requests
 import urllib.parse as urlparse
 from lxml import html as lxmlhtml
 import datetime
@@ -460,12 +460,7 @@ async def multiple_choice_view(ctx, data, func, edit_func=None):
             if edit_func:
                 await edit_func(data[idx],ctx,interaction)
             else:
-                e = func(data[idx])
-                if e['file']:
-                    # in case you ever try to reuse this func: be warned files are all named icon.png so it will likely break.
-                    view.message = await interaction.edit_original_response(content = None, embed = e['embed'], view=view, attachments=[e['file']])
-                else:
-                    view.message = await interaction.edit_original_response(content = None, embed = e['embed'], view=view)
+                view.message = await interaction.edit_original_response(content = None, embed = func(data[idx]), view=view)
         button.callback = show_item
         view.add_item(button)
     sent_msg = await bot.send_deletable_message(ctx,ctx.message.channel, f'Multiple results, showing {min(len(data),SEARCH_REACTION_LIMIT)}/{len(data)}.', view=view)
@@ -501,7 +496,7 @@ class Info(commands.Cog):
                 await multiple_choice_view(ctx,data,_create_unique_embed)
                 return
             e = _create_unique_embed(data[0])
-            await bot.send_deletable_message(ctx, ctx.message.channel, embed=e['embed'], file=e['file'])
+            await bot.send_deletable_message(ctx, ctx.message.channel, embed=e)
             return
         data = bot.db.get_data('unique_items',item,league,limit=SEARCH_LIMIT)
         if not data:
@@ -514,7 +509,7 @@ class Info(commands.Cog):
             await multiple_choice_view(ctx,data,_create_unique_embed)
             return
         e = _create_unique_embed(data[0])
-        await bot.send_deletable_message(ctx, ctx.message.channel, embed=e['embed'], file=e['file'])
+        await bot.send_deletable_message(ctx, ctx.message.channel, embed=e)
         
     @commands.command(pass_context=True)
     async def lab(self, ctx, difficulty: str=None):
@@ -627,7 +622,7 @@ class Info(commands.Cog):
             #send choices
             return await multiple_choice_view(ctx,data,_create_currency_embed)
         e = _create_currency_embed(data[0])
-        await bot.send_deletable_message(ctx, ctx.message.channel, embed=e['embed'], file=e['file'])
+        await bot.send_deletable_message(ctx, ctx.message.channel, embed=e)
         
     @commands.command(pass_context=True, aliases=['p','n','ns','ps'])
     async def node(self, ctx, *skillname: str):
@@ -650,7 +645,7 @@ class Info(commands.Cog):
                 # send choices
                 return await multiple_choice_view(ctx,data,_create_node_embed)
             e = _create_node_embed(data[0])
-            await bot.send_deletable_message(ctx, ctx.message.channel, embed=e['embed'], file=e['file'])
+            await bot.send_deletable_message(ctx, ctx.message.channel, embed=e)
             return
         
         data = bot.db.get_data('passive_skills',name,limit=SEARCH_LIMIT)
@@ -661,7 +656,7 @@ class Info(commands.Cog):
             #send choices
             return await multiple_choice_view(ctx,data,_create_node_embed)
         e = _create_node_embed(data[0])
-        await bot.send_deletable_message(ctx, ctx.message.channel, embed=e['embed'], file=e['file'])
+        await bot.send_deletable_message(ctx, ctx.message.channel, embed=e)
         
 def _cache_labs():
     today = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d')
@@ -691,7 +686,7 @@ def _create_currency_embed(data):
         timestamp = data['timestamp'].replace(tzinfo = datetime.timezone.utc) if data['timestamp'] else None)
     if 'icon' in data.keys() and data['icon']:
         e.set_thumbnail(url=data['icon'].replace(' ','%20'))
-    return {'embed': e, 'file': None}
+    return e
 
 def _create_unique_embed(data):
     def if_not_zero(val,label):
@@ -741,14 +736,10 @@ def _create_unique_embed(data):
         title='\n'.join((data['name'].strip(),data['baseitem'].strip())),
         type='rich',color=0xaf6025,
         timestamp = data['timestamp'].replace(tzinfo = datetime.timezone.utc) if data['timestamp'] else None)
-    f = None
     if 'icon' in data.keys() and data['icon']:
         e.set_thumbnail(url=data['icon'])
     elif 'image_url' in data.keys() and data['image_url']:
-        url=f"{WIKI_BASE}Special:Redirect/file/{urlquote(data['image_url'])}"
-        imgdata = get_cached_image(url)
-        f = discord.File(imgdata, filename="icon.png")
-        e.set_thumbnail(url="attachment://icon.png")
+        e.set_thumbnail(url=f"{WIKI_BASE}Special:Redirect/file/{urlquote(data['image_url'])}")
     if data['impl'] or data['expl']: #this is only for tabula
         header = re.compile(r'<th[^>]*>(.*?)<\/th>',re.DOTALL)
         expl_mods = str(data['expl'])
@@ -765,7 +756,7 @@ def _create_unique_embed(data):
         if data['eledps']:
             s+="Elemental DPS: {}".format(data['eledps'])
         e.set_footer(text=s)
-    return {'embed': e, 'file': f}
+    return e
 
 def _create_gem_embed(data, quality=Quality.NORMAL):
     def if_not_zero(val,label):
@@ -883,57 +874,17 @@ def _create_gem_embed(data, quality=Quality.NORMAL):
         e.set_footer(text='Colorless')
     return e
 
-CACHE_DIR = "./wiki_cache"
-os.makedirs(CACHE_DIR, exist_ok=True)
-
-def get_cached_image(url: str) -> io.BytesIO:
-    """Follows redirects, downloads/caches the image synchronously, and returns a BytesIO object."""
-    # 1. Create a safe filename via MD5 hash
-    url_hash = hashlib.md5(url.encode('utf-8')).hexdigest()
-    cache_path = os.path.join(CACHE_DIR, f"{url_hash}.png")
-    
-    # 2. Check if cache exists and is less than 30 days old (2,592,000 seconds)
-    if os.path.exists(cache_path):
-        file_age = time.time() - os.path.getmtime(cache_path)
-        if file_age < 2592000:
-            with open(cache_path, "rb") as f:
-                return io.BytesIO(f.read())
-
-    # 3. Cache missed or expired -> download fresh image synchronously
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-    
-    try:
-        # Create request object to append our user-agent string
-        req = urllib.request.Request(url, headers=headers)
-        
-        # urlopen inherently follows HTTP redirects (301/302) automatically
-        with urllib.request.urlopen(req) as response:
-            image_bytes = response.read()
-            
-    except Exception as e:
-        raise Exception(f"Failed to fetch image from PoE Wiki. Error: {e}")
-
-    # 4. Update the local file cache
-    with open(cache_path, "wb") as f:
-        f.write(image_bytes)
-
-    return io.BytesIO(image_bytes)
-
-
 def _create_node_embed(data):
     stats_string = data['desc'].replace('<br>','\n')
     e = discord.Embed(url=f"{WIKI_BASE}{data['name'].replace(' ','_')}",
         title=data['name'],
         type='rich',color=0xa38d6d)
     e.add_field(name='Keystone' if data['is_keystone'] else 'Notable', value=_strip_html_tags(stats_string), inline=False)
-    # poewiki banned discord so download/upload the image instead
-    f = None
+
     if 'image_url' in data.keys() and data['image_url']:
-        url=f"{WIKI_BASE}Special:Redirect/file/{urlquote(data['image_url'])}"
-        imgdata = get_cached_image(url)
-        f = discord.File(imgdata, filename="icon.png")
-        e.set_thumbnail(url="attachment://icon.png")
-    return {'embed': e, 'file': f}
+        e.set_thumbnail(url=f"{WIKI_BASE}Special:Redirect/file/{urlquote(data['image_url'])}")
+
+    return e
 
 def cloudscraper_get(url):
     with cloudscraper.create_scraper() as s:
