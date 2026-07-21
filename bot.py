@@ -867,7 +867,7 @@ def _create_gem_embed(data, quality=Quality.NORMAL):
     if 'icon' in data.keys() and data['icon']:
         e.set_thumbnail(url=data['icon'].replace(' ','%20'))
     qual_bonus = data[QUAL_TO_DB_COL_NAME[quality]]
-    e.add_field(name='Per 1% Quality:',value=bold_nums.sub(r'**\1**', f'{qual_bonus}\n\n{data["stat_text"] if data["stat_text"] else ""}'.replace('<br>','\n')).replace('****',''),inline=False)
+    e.add_field(name='Quality Bonus:',value=bold_nums.sub(r'**\1**', f'{qual_bonus}\n\n{data["stat_text"] if data["stat_text"] else ""}'.replace('<br>','\n')).replace('****',''),inline=False)
     if not data['primary_att'].lower() == 'none':
         e.set_footer(text=data['primary_att'].capitalize())
     else:

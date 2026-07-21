@@ -186,6 +186,7 @@ SKILL_GEM_PROPERTY_MAPPING=dict(
                 'skill.skill_id':'skill_id', # used for trans gems matching
                 # skill_levels fields:
                 'skill_levels.attack_speed_multiplier':'attack_speed_multiplier',
+                'skill_levels.level':'level',
                 # skill_quality fields:
                 'skill_quality.stat_text':'qual_bonus',
         },
@@ -200,135 +201,92 @@ SKILL_QUALITY_PROPERTY_MAPPING={
                 'skill_quality.stat_text':'q_stat_text',
                 'skill_quality.weight':'q_weight',
         }
-def scrape_skill_gems(limit=100000):
-        query_limit = min(500,limit)
-        rowindex = 0
+def scrape_skill_gems():
+        query_limit = 500
+        last_batch_size = query_limit
         last_rowid = -1
+        # use dict to prevent duplicate entries from overlap
         keyed_results = {}
-        
-        # query each skill separately to prevent results that are too long for mediawiki
-        # _pageNamespace == 0 filters out Template: pages
-        while rowindex<limit:
-            query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_gems&fields=skill_gems._pageName=name,skill_gems._rowID=rowid&where=skill_gems._rowID>{last_rowid+1} AND skill_gems._pageNamespace=0&order_by=skill_gems._rowID&limit={query_limit}'
+        while last_batch_size == query_limit:
+            # table joins
+            # requested fields
+            # sort and filter (_pageNamespace == 0 filters out Template: pages)
+            query = f'''{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_gems,skill,skill_levels,skill_quality,gem_levels&join_on=skill._pageName=skill_levels._pageName,skill._pageName=skill_quality._pageName,skill.skill_id=skill_gems.skill_id,skill_gems._pageName=gem_levels._pageName,skill_levels.level=gem_levels.level&fields='''+\
+            f'''{','.join(['='.join((k,v)) for k,v in SKILL_GEM_PROPERTY_MAPPING.items()])},skill_gems._rowID=rowid'''+\
+            f'''&where=(skill_levels.level=skill.max_level OR skill_levels.level<2) AND skill_gems._rowID >= {last_rowid - 1} AND skill_gems._pageNamespace=0&order_by=skill_gems._rowID&limit={query_limit}'''
             api_results = []
             for i in range(3):
-                rj=None
                 try:
                     r = requests.get(query)
                     r.encoding = 'utf-8'
                     rj = r.json()
+                    last_batch_size = len(rj['cargoquery'])
                     api_results = [a['title'] for a in rj['cargoquery']]
                     break
                 except Exception as e:
-                    print('error scraping skill names with query:',query)#,rj)
-                    print(r.headers)
                     time.sleep(4)
-                    # exit()
-            if not len(api_results):
+                    #error, trying again.
+            if not api_results:
+                print('error scraping skills with query:',query)
+                print(r.headers)
                 break
             for res in api_results:
-                last_rowid = int(res['rowid'])
-                res.pop('rowid',None)
-                if res['name'] not in keyed_results:
-                    keyed_results[res['name']] = res
-            rowindex+=query_limit
+                thislevel = int(res.pop('level',None))
+                last_rowid = int(res.pop('rowid'))
+                keyed_results[res['name']] = res
+                if thislevel == int(res['max_level']):
+                    # add _max version of all _VARIABLE_FIELDS
+                    keyed_results[res['name']].update({'{}_max'.format(k):v for k,v in res.items() if k in SKILL_GEM_VARIABLE_FIELDS.values()})
+                    keyed_results[res['name']].update({'{}_max'.format(k):v for k,v in res.items() if k in GEM_LEVELS_VARIABLE_FIELDS.values()})
+                elif thislevel == 0:
+                    #updates dict, replacing only the empty values with new ones
+                    keyed_results[res['name']].update(
+                        {k:v for k,v in res.items() if k not in [k for k,v in keyed_results[res['name']].items() if v]}
+                        )
+                elif thislevel == 1:
+                    #update with all non-null values
+                    keyed_results[res['name']].update({k:v for k,v in res.items() if v})
+                # trim skill_id to get skill_id_group for grouping trans gems
+                keyed_results[res['name']]['skill_id_group'] = re.sub(r'Alt[a-zA-Z]$|Plus$|^Vaal', '', res.get('skill_id',''))
             time.sleep(3)
-        sk_names = list(keyed_results.keys())
-        
-        # query_limit = 500
-        batch_size = 10
-        rowindex = 0
-        # last_rowid = -1
-        # keyed_results = {}
-        
-        
-        
-        # print('TOTAL SKILL COUNT:',len(sk_names),'batch:',batch_size)
-        for start_index in range(0,len(sk_names),batch_size):
-        # while rowindex<limit:
-                # if the results of this query exceeds query_limit you are just screwed, so keep batch_size low.
-                query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_gems,skill,skill_levels,skill_quality,gem_levels&join_on=skill._pageName=skill_levels._pageName,skill._pageName=skill_quality._pageName,skill.skill_id=skill_gems.skill_id,skill_gems._pageName=gem_levels._pageName,skill_levels.level=gem_levels.level&fields='+\
-                f'''{','.join(['='.join((k,v)) for k,v in SKILL_GEM_PROPERTY_MAPPING.items()])}'''+\
-                f''',skill_levels.level=level&where=(skill_levels.level=skill.max_level OR skill_levels.level<2) AND skill_gems._pageName IN ({",".join([f'"{a}"' for a in sk_names[start_index:start_index+batch_size]])})&limit={query_limit}'''
-                api_results = []
-                for i in range(3):
-                        rj=None
-                        try:
-                            r = requests.get(query)
-                            r.encoding = 'utf-8'
-                            rj = r.json()
-                            api_results = [a['title'] for a in rj['cargoquery']]
-                            break
-                        except Exception as e:
-                            print('error scraping skills with query:',query)#,rj)
-                            print(r.headers)
-                            time.sleep(4)
-                            # raise
-                if not len(api_results):
-                        break
-                for res in api_results:
-                        # last_rowid = int(res['rowid'])
-                        # res.pop('rowid',None)
-                        thislevel = int(res.pop('level',None))
-                        if res['name'] not in keyed_results:
-                                keyed_results[res['name']] = res
-                        if thislevel == int(res['max_level']):
-                                # add _max version of all _VARIABLE_FIELDS
-                                keyed_results[res['name']].update({'{}_max'.format(k):v for k,v in res.items() if k in SKILL_GEM_VARIABLE_FIELDS.values()})
-                                keyed_results[res['name']].update({'{}_max'.format(k):v for k,v in res.items() if k in GEM_LEVELS_VARIABLE_FIELDS.values()})
-                        elif thislevel == 0:
-                                #updates dict, replacing only the empty values with new ones
-                                keyed_results[res['name']].update(
-                                        {k:v for k,v in res.items() if k not in [k for k,v in keyed_results[res['name']].items() if v]}
-                                        )
-                        elif thislevel == 1:
-                                #update with all non-null values
-                                keyed_results[res['name']].update({k:v for k,v in res.items() if v})
-                        # trim skill_id to get skill_id_group for grouping trans gems
-                        keyed_results[res['name']]['skill_id_group'] = re.sub(r'Alt[a-zA-Z]$|Plus$|^Vaal', '', res.get('skill_id',''))
-                # rowindex+=query_limit
-                time.sleep(3)
-                # break
-        # return keyed_results
+            # break # for debug
         return keyed_results.values()
 
-def scrape_skill_quality(limit=50000):
-        full_results=[]
-        rowindex = 0
-        query_limit = 500
-        last_rowid = -1 # adds 1 to this.
-        while rowindex<limit:
-                query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_quality'+\
-                        '&fields='+','.join(['='.join((k,v)) for k,v in SKILL_QUALITY_PROPERTY_MAPPING.items()])+',skill_quality._rowID=rowid&where=skill_quality._rowID>{} &order_by=skill_quality._rowID&limit={}'.format(last_rowid+1,query_limit)
-                # need to fetch in batches of 500 (the limit for one query)
-                # we will use _rowID to do this, continue querying until we get 0 results
-                # this isnt 100% safe but it should work unless someone does something to really break the db.
-                # we have fixed this maybe with 'expected_items', see above.
-                api_results = []
-                for i in range(3):
-                        rj=None
-                        try:
-                                r = requests.get(query)
-                                r.encoding = 'utf-8'
-                                rj = r.json()
-                                api_results = [a['title'] for a in rj['cargoquery']]
-                                break
-                        except:
-                                time.sleep(4)
-                                #error, trying again.
-                if not len(api_results): # and len(full_results)>=expected_items:
-                        break
-                for res in api_results:
-                        last_rowid = int(res['rowid'])
-                        res.pop('rowid',None)
-                        # res['impl'] = remove_wiki_formats(html.unescape(res['impl']))
-                        # res['expl'] = remove_wiki_formats(html.unescape(res['expl']))#.replace('<br>','\n')
-                full_results.extend(api_results)
-                rowindex+=query_limit
-                time.sleep(3)
-        # need to call remove_wiki_formats on impl and expl and we should be good2go
-##        print('total unique_item results:',len(full_results))
-        return full_results
+def scrape_skill_quality():
+    ''' this is no longer used as its (practically) baked into scrape_skill_gems '''
+    query_limit = 500
+    last_batch_size = query_limit
+    last_rowid = -1
+    # use dict to prevent duplicate entries from overlap
+    keyed_results = {}
+    while last_batch_size == query_limit:
+        query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_quality'+\
+                f'&fields={','.join(['='.join((k,v)) for k,v in SKILL_QUALITY_PROPERTY_MAPPING.items()])}'+\
+                f',skill_quality._rowID=rowid&where=skill_quality._rowID>{last_rowid - 1} &order_by=skill_quality._rowID&limit={query_limit}'
+        api_results = []
+        for i in range(3):
+            try:
+                r = requests.get(query)
+                r.encoding = 'utf-8'
+                rj = r.json()
+                last_batch_size = len(rj['cargoquery'])
+                api_results = [a['title'] for a in rj['cargoquery']]
+                break
+            except:
+                time.sleep(4)
+                #error, trying again.
+        if not api_results:
+            print('error scraping skill quality with query:',query)
+            print(r.headers)
+            break
+        for res in api_results:
+            last_rowid = int(res.pop('rowid'))
+            keyed_results[res['name']] = res
+            # res['impl'] = remove_wiki_formats(html.unescape(res['impl']))
+            # res['expl'] = remove_wiki_formats(html.unescape(res['expl']))#.replace('<br>','\n')
+        time.sleep(3)
+    return keyed_results.values()
+    
 UNIQUE_ITEM_PROPERTY_MAPPING={
         'items._pageName':'name',
         'items.implicit_stat_text':'impl',
@@ -410,51 +368,41 @@ def get_image_url(pageName, image_url, is_div_card=False):
                 return data['imageinfo'][0]['url']
         return None
 
-def scrape_unique_items(limit=50000):
-        full_results=[]
-        rowindex = 0
-        query_limit = 500
-        last_rowid = -1 # adds 1 to this.
-        while rowindex<limit:
-                query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=items,weapons,shields,armours,jewels,flasks&join_on=items._pageName=weapons._pageName,items._pageName=shields._pageName,items._pageName=armours._pageName'+\
-                        ',items._pageName=jewels._pageName,items._pageName=flasks._pageName'+\
-                        '&fields='+','.join(['='.join((k,v)) for k,v in UNIQUE_ITEM_PROPERTY_MAPPING.items()])+',items._rowID=rowid&where=rarity=\'Unique\' AND items._rowID>={}&group_by=items._pageName&order_by=items._rowID&limit={}'.format(last_rowid+1,query_limit)
-                # need to fetch in batches of 500 (the limit for one query)
-                # we will use _rowID to do this, continue querying until we get 0 results
-                # this isnt 100% safe but it should work unless someone does something to really break the db.
-                # we have fixed this maybe with 'expected_items', see above.
-                api_results = []
-                for i in range(3):
-                        rj=None
-                        try:
-                                r = requests.get(query)
-                                r.encoding = 'utf-8'
-                                rj = r.json()
-                                api_results = [a['title'] for a in rj['cargoquery']]
-                                break
-                        except:
-                                time.sleep(4)
-                                #error, trying again.
-##                print('currently at',len(full_results),'/',expected_items,'items. row#:',rowindex)
-                if not len(api_results): # and len(full_results)>=expected_items:
-                        break
-                for res in api_results:
-                        last_rowid = int(res['rowid'])
-                        res.pop('rowid',None)
-                        # print(res)
-                        # remove_wiki_formats
-                        res.update({k:remove_wiki_formats(html.unescape(v or '')) for k,v in res.items()})
-                        # force add impl and expl
-                        res['impl'] = res.get('impl','')
-                        res['expl'] = res.get('expl','')
-                        # res['impl'] = remove_wiki_formats(html.unescape(res.get('impl','')))
-                        # res['expl'] = remove_wiki_formats(html.unescape(res.get('expl','')))#.replace('<br>','\n')
-                full_results.extend(api_results)
-                rowindex+=query_limit
-                time.sleep(3)
-        # need to call remove_wiki_formats on impl and expl and we should be good2go
-##        print('total unique_item results:',len(full_results))
-        return full_results
+def scrape_unique_items():
+    query_limit = 500
+    last_batch_size = query_limit
+    last_rowid = -1
+    # use dict to prevent duplicate entries from overlap
+    keyed_results = {}
+    while last_batch_size == query_limit:
+        query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=items,weapons,shields,armours,jewels,flasks&join_on=items._pageName=weapons._pageName,'+\
+                'items._pageName=shields._pageName,items._pageName=armours._pageName,items._pageName=jewels._pageName,items._pageName=flasks._pageName'+\
+                f'&fields={','.join(['='.join((k,v)) for k,v in UNIQUE_ITEM_PROPERTY_MAPPING.items()])},'+\
+                f'items._rowID=rowid&where=rarity=\'Unique\' AND items._rowID>={last_rowid - 1}&group_by=items._pageName&order_by=items._rowID&limit={query_limit}'
+        api_results = []
+        for i in range(3):
+            try:
+                r = requests.get(query)
+                r.encoding = 'utf-8'
+                rj = r.json()
+                last_batch_size = len(rj['cargoquery'])
+                api_results = [a['title'] for a in rj['cargoquery']]
+                break
+            except:
+                time.sleep(4)
+                #error, trying again.
+        if not api_results:
+            print('error scraping unique items with query:',query)
+            print(r.headers)
+            break
+        for res in api_results:
+            last_rowid = int(res.pop('rowid'))
+            keyed_results[res['name']] = {k:remove_wiki_formats(html.unescape(v or '')) for k,v in res.items()}
+            # force add impl and expl
+            res['impl'] = res.get('impl','')
+            res['expl'] = res.get('expl','')
+        time.sleep(3)
+    return keyed_results.values()
 
 PASSIVE_SKILLS_PROPERTY_MAPPING={
         'passive_skills._pageName':'pagename',
@@ -465,41 +413,41 @@ PASSIVE_SKILLS_PROPERTY_MAPPING={
         'passive_skills.icon':'image_url',
 }
 
-def scrape_passive_skills(limit=50000):
-        full_results=[]
-        rowindex = 0
-        query_limit = 500
-        last_rowid = -1 # adds 1 to this.
-        while rowindex<limit:
-                query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=passive_skills'+\
-                        '&fields='+','.join(['='.join((k,v)) for k,v in PASSIVE_SKILLS_PROPERTY_MAPPING.items()])+',passive_skills._rowID=rowid&where=passive_skills._rowID>={} AND (passive_skills.is_keystone OR passive_skills.is_notable)&order_by=passive_skills._rowID&limit={}'.format(last_rowid+1,query_limit)
-                # need to fetch in batches of 500 (the limit for one query)
-                # we will use _rowID to do this, continue querying until we get 0 results
-                # this isnt 100% safe but it should work unless someone does something to really break the db.
-                # we have fixed this maybe with 'expected_items', see above.
-                api_results = []
-                for i in range(3):
-                        rj=None
-                        try:
-                                r = requests.get(query)
-                                r.encoding = 'utf-8'
-                                rj = r.json()
-                                api_results = [a['title'] for a in rj['cargoquery']]
-                                break
-                        except:
-                                time.sleep(4)
-                                #error, trying again.
-##                print('currently at',len(full_results),'/',expected_items,'items. row#:',rowindex)
-                if not len(api_results): # and len(full_results)>=expected_items:
-                        break
-                for res in api_results:
-                        last_rowid = int(res['rowid'])
-                        res.pop('rowid',None)
-                        res['desc'] = remove_wiki_formats(html.unescape(res.get('desc','') or ''))
-                full_results.extend(api_results)
-                rowindex+=query_limit
-                time.sleep(3)
-        return full_results
+def scrape_passive_skills():
+    query_limit = 500
+    last_batch_size = query_limit
+    last_rowid = -1
+    # use dict to prevent duplicate entries from overlap
+    keyed_results = {}
+    while last_batch_size == query_limit:
+        query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=passive_skills'+\
+                f'&fields={','.join(['='.join((k,v)) for k,v in PASSIVE_SKILLS_PROPERTY_MAPPING.items()])},'+\
+                f'passive_skills._rowID=rowid&where=passive_skills._rowID>={last_rowid - 1} '+\
+                f'AND (passive_skills.is_keystone OR passive_skills.is_notable)&order_by=passive_skills._rowID&limit={query_limit}'
+        api_results = []
+        for i in range(3):
+            try:
+                r = requests.get(query)
+                r.encoding = 'utf-8'
+                rj = r.json()
+                last_batch_size = len(rj['cargoquery'])
+                api_results = [a['title'] for a in rj['cargoquery']]
+                break
+            except:
+                time.sleep(4)
+                #error, trying again.
+        if not api_results:
+            print('error scraping passive skills with query:',query)
+            print(r.headers)
+            break
+        for res in api_results:
+            last_rowid = int(res.pop('rowid'))
+            res['desc'] = remove_wiki_formats(html.unescape(res.get('desc','') or ''))
+            keyed_results[res['name']] = res
+            # res['impl'] = remove_wiki_formats(html.unescape(res['impl']))
+            # res['expl'] = remove_wiki_formats(html.unescape(res['expl']))#.replace('<br>','\n')
+        time.sleep(3)
+    return keyed_results.values()
         
 #only the fields we care about.
 #itemclass 4 is gems. probably the only one we need
@@ -668,18 +616,22 @@ def get_lab_urls(date):
                 ret.append(t)
     return ret
 if __name__ == '__main__':
+    # poeninja scrapers:
     # print(get_ninja_rates())
-    print(get_ninja_prices())
+    # print(get_ninja_prices())
+
+    # poewiki scrapers:   
+    # print(scrape_skill_gems())
+    # print(scrape_skill_quality())
+    # print(scrape_passive_skills())
+    # print(scrape_unique_items())
+    
     # import datetime
     # print(get_lab_urls(datetime.datetime.utcnow().strftime('%Y-%m-%d')))
-    # print(scrape_skill_gems(2))
+    
     # import pprint
     # with open('skill_gems_test.txt','w') as f:
         # res = scrape_skill_gems()
         # pprint.pprint(res)
         # pprint.pprint(res,f)
-    # print(scrape_skill_quality())
-    # print(scrape_passive_skills())
-    # print(scrape_unique_items())
-    
     # print(remove_wiki_formats(html.unescape('<em class="tc -mod">(278-321)</em>')))
