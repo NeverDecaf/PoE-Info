@@ -738,6 +738,8 @@ def _create_unique_embed(data):
         timestamp = data['timestamp'].replace(tzinfo = datetime.timezone.utc) if data['timestamp'] else None)
     if 'icon' in data.keys() and data['icon']:
         e.set_thumbnail(url=data['icon'])
+    elif 'fallback_icon' in data.keys() and data['fallback_icon']:
+        e.set_thumbnail(url=data['fallback_icon']) 
     elif 'image_url' in data.keys() and data['image_url']:
         e.set_thumbnail(url=f"{WIKI_BASE}Special:Redirect/file/{urlquote(data['image_url'])}")
     if data['impl'] or data['expl']: #this is only for tabula

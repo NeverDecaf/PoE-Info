@@ -212,8 +212,8 @@ def scrape_skill_gems():
             # requested fields
             # sort and filter (_pageNamespace == 0 filters out Template: pages)
             query = f'''{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_gems,skill,skill_levels,skill_quality,gem_levels&join_on=skill._pageName=skill_levels._pageName,skill._pageName=skill_quality._pageName,skill.skill_id=skill_gems.skill_id,skill_gems._pageName=gem_levels._pageName,skill_levels.level=gem_levels.level&fields='''+\
-            f'''{','.join(['='.join((k,v)) for k,v in SKILL_GEM_PROPERTY_MAPPING.items()])},skill_gems._rowID=rowid'''+\
-            f'''&where=(skill_levels.level=skill.max_level OR skill_levels.level<2) AND skill_gems._rowID >= {last_rowid - 1} AND skill_gems._pageNamespace=0&order_by=skill_gems._rowID&limit={query_limit}'''
+                f'''{','.join(['='.join((k,v)) for k,v in SKILL_GEM_PROPERTY_MAPPING.items()])},skill_gems._rowID=rowid'''+\
+                f'''&where=(skill_levels.level=skill.max_level OR skill_levels.level<2) AND skill_gems._rowID >= {last_rowid - 1} AND skill_gems._pageNamespace=0&order_by=skill_gems._rowID&limit={query_limit}'''
             api_results = []
             for i in range(3):
                 try:
@@ -260,9 +260,9 @@ def scrape_skill_quality():
     # use dict to prevent duplicate entries from overlap
     keyed_results = {}
     while last_batch_size == query_limit:
-        query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_quality'+\
-                f'&fields={','.join(['='.join((k,v)) for k,v in SKILL_QUALITY_PROPERTY_MAPPING.items()])}'+\
-                f',skill_quality._rowID=rowid&where=skill_quality._rowID>{last_rowid - 1} &order_by=skill_quality._rowID&limit={query_limit}'
+        query = f'''{WIKI_BASE}api.php?action=cargoquery&format=json&tables=skill_quality'''+\
+            f'''&fields={','.join(['='.join((k,v)) for k,v in SKILL_QUALITY_PROPERTY_MAPPING.items()])}'''+\
+            f''',skill_quality._rowID=rowid&where=skill_quality._rowID>{last_rowid - 1} &order_by=skill_quality._rowID&limit={query_limit}'''
         api_results = []
         for i in range(3):
             try:
@@ -375,10 +375,10 @@ def scrape_unique_items():
     # use dict to prevent duplicate entries from overlap
     keyed_results = {}
     while last_batch_size == query_limit:
-        query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=items,weapons,shields,armours,jewels,flasks&join_on=items._pageName=weapons._pageName,'+\
-                'items._pageName=shields._pageName,items._pageName=armours._pageName,items._pageName=jewels._pageName,items._pageName=flasks._pageName'+\
-                f'&fields={','.join(['='.join((k,v)) for k,v in UNIQUE_ITEM_PROPERTY_MAPPING.items()])},'+\
-                f'items._rowID=rowid&where=rarity=\'Unique\' AND items._rowID>={last_rowid - 1}&group_by=items._pageName&order_by=items._rowID&limit={query_limit}'
+        query = f'''{WIKI_BASE}api.php?action=cargoquery&format=json&tables=items,weapons,shields,armours,jewels,flasks&join_on=items._pageName=weapons._pageName,'''+\
+            '''items._pageName=shields._pageName,items._pageName=armours._pageName,items._pageName=jewels._pageName,items._pageName=flasks._pageName'''+\
+            f'''&fields={','.join(['='.join((k,v)) for k,v in UNIQUE_ITEM_PROPERTY_MAPPING.items()])},'''+\
+            f'''items._rowID=rowid&where=rarity=\'Unique\' AND items._rowID>={last_rowid - 1}&group_by=items._pageName&order_by=items._rowID&limit={query_limit}'''
         api_results = []
         for i in range(3):
             try:
@@ -420,10 +420,10 @@ def scrape_passive_skills():
     # use dict to prevent duplicate entries from overlap
     keyed_results = {}
     while last_batch_size == query_limit:
-        query = f'{WIKI_BASE}api.php?action=cargoquery&format=json&tables=passive_skills'+\
-                f'&fields={','.join(['='.join((k,v)) for k,v in PASSIVE_SKILLS_PROPERTY_MAPPING.items()])},'+\
-                f'passive_skills._rowID=rowid&where=passive_skills._rowID>={last_rowid - 1} '+\
-                f'AND (passive_skills.is_keystone OR passive_skills.is_notable)&order_by=passive_skills._rowID&limit={query_limit}'
+        query = f'''{WIKI_BASE}api.php?action=cargoquery&format=json&tables=passive_skills'''+\
+            f'''&fields={','.join(['='.join((k,v)) for k,v in PASSIVE_SKILLS_PROPERTY_MAPPING.items()])},'''+\
+            f'''passive_skills._rowID=rowid&where=passive_skills._rowID>={last_rowid - 1} '''+\
+            f'''AND (passive_skills.is_keystone OR passive_skills.is_notable)&order_by=passive_skills._rowID&limit={query_limit}'''
         api_results = []
         for i in range(3):
             try:
@@ -635,3 +635,4 @@ if __name__ == '__main__':
         # pprint.pprint(res)
         # pprint.pprint(res,f)
     # print(remove_wiki_formats(html.unescape('<em class="tc -mod">(278-321)</em>')))
+    pass
